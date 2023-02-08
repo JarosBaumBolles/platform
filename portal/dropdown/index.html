@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en" class="h-100">
+    <head>
+        <title>Hourly Building Monitoring: Home</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">    
+        
+        <link 
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" 
+            rel="stylesheet" 
+        />
+        
+        <link 
+            href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.0.0/mdb.min.css" 
+            rel="stylesheet" 
+        />        
+
+        <link 
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" 
+            rel="stylesheet" 
+        />       
+
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
+
+        <link 
+            href="./css/dropdown.css" 
+            rel="stylesheet" 
+        />                
+
+        <link 
+            href="./css/tabs.css" 
+            rel="stylesheet" 
+        />   
+
+        <script src="../js/lib/lodash/4.17.21/lodash.js"></script>
+
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.min.js"></script>        
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.0.0/mdb.min.js"></script>        
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>        
+		<script src="./js/dropdown.js"></script>        
+    </head>
+    <body>
+        <div class="d-flex flex-column overflow-hidden min-vh-100 vh-100 bg-body">
+            <div class="card border border-secondary shadow-0 w-100 h-100">
+                <div class="card-header text-white bg-primary border border-2 border-danger">
+                    <div class="d-flex flex-row justify-content-between">
+                        <div class="d-flex flex-row justify-content-start align-items-center">
+                            <div class="ps-1 pe-1">
+                                <h1 class="m-0">
+                                    <strong>TEST</strong>
+                                </h1>
+                            </div>
+                            <div class="ps-1 pe-1 h-100">
+                                <div class="vr h-100"></div>
+                            </div>
+                            <!-- Custom Dropdown-->
+                            <button 
+                                class="btn btn-tag btn-rounded btn-outline-light text-white dropdown-toggle ps-1 pe-2" 
+                                type="button" 
+                                id="{{prefix}}_dropdownMenuButton_{{idx}}" 
+                                data-mdb-toggle="dropdown" 
+                                aria-expanded="false">
+                                <div class="badge badge-danger bage-participant-config rounded-circle p-1">
+                                    <i class="fa-sharp fa-solid fa-circle-exclamation"></i>
+                                </div> PARTICIPANT
+                            </button>
+                            <!-- Custom Dropdown-->
+                            <div class="ps-1 pe-1 h-100">
+                                <div class="vr h-100"></div>
+                            </div>
+                            <nav class="navbar navbar-dropdown navbar-light navbar-rounded navbar-outline">
+                                <div class="btn-group dropstart">
+                                    <button 
+                                        class="btn btn-default dropdown-toggle" 
+                                        type="button" 
+                                        data-mdb-toggle="dropdown"
+                                    >
+                                        <div class="dropdown-icon">                                                           
+                                            <i class="fas fa-exclamation-circle"></i>
+                                        </div>
+                                        <div class="dropdown-title" >Tutorials</div>
+                                        <div class="dropdown-caret">
+                                            <i class="fas"></i>
+                                        </div>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-node" href="#">
+                                                <div class="item-icon"></div>
+                                                <div class="item-title">
+                                                    HTML
+                                                </div>                                                   
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-node" href="#">
+                                                <div class="item-icon">  
+                                                    <i class="fas fa-exclamation-circle"></i>
+                                                </div>
+                                                <div class="item-title">
+                                                    <span>CSS</span>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li class="dropdown-submenu">
+                                            <a class="dropdown-submenu-toggle dropdown-node disabled" href="#">      
+                                                <div class="item-icon">                                                     
+                                                    <i class="fa-sharp fa-solid fa-circle-exclamation text-danger"></i>
+                                                </div>    
+                                                <div class="item-title">
+                                                    <div>New dropdown</div>
+                                                </div>                                                   
+                                                <div class="item-caret">
+                                                    <i class="fas"></i>
+                                                </div>                                                                                     
+                                            </a>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-node disabled" href="#">
+                                                        <div class="item-icon"></div>
+                                                        <div class="item-title" >
+                                                            2nd level dropdown
+                                                        </div>                                                             
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-node" href="#">
+                                                        <div class="item-icon"></div>
+                                                        <div class="item-title" >
+                                                            2nd level dropdown
+                                                        </div>  
+                                                    </a>
+                                                </li>
+                                                <li class="dropdown-submenu">
+                                                    <a class="dropdown-submenu-toggle dropdown-node" href="#">
+                                                        <div class="item-title">
+                                                            Another dropdown 
+                                                        </div>
+                                                        <div class="item-caret">
+                                                            <i class="fas"></i>
+                                                        </div>
+                                                    </a>
+                                                    <ul class="dropdown-menu">
+                                                        <li>
+                                                            <a class="dropdown-node" href="#">
+                                                                <div class="item-title">
+                                                                    3rd level dropdown 
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-node" href="#">
+                                                                <div class="item-title">
+                                                                    3rd level dropdown 
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                    </ul>                                    
+                                </div>
+                            </nav>       
+                            
+                            <nav class="navbar navbar-dropdown navbar-light navbar-rounded navbar-outline">
+                                <div class="btn-group dropend">
+                                    <button 
+                                        class="btn btn-default dropdown-toggle" 
+                                        type="button" 
+                                        data-mdb-toggle="dropdown"
+                                    >
+                                        <div class="dropdown-icon">                                                           
+                                            <i class="fas fa-exclamation-circle"></i>
+                                        </div>
+                                        <div class="dropdown-title" >Tutorials</div>
+                                        <div class="dropdown-caret">
+                                            <i class="fas"></i>
+                                        </div>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-node" href="#">
+                                                <div class="item-icon"></div>
+                                                <div class="item-title">
+                                                    HTML
+                                                </div>                                                   
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-node" href="#">
+                                                <div class="item-icon">  
+                                                    <i class="fas fa-exclamation-circle"></i>
+                                                </div>
+                                                <div class="item-title">
+                                                    <span>CSS</span>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li class="dropdown-submenu">
+                                            <a class="dropdown-submenu-toggle dropdown-node" href="#">      
+                                                <div class="item-icon">                                                     
+                                                    <i class="fa-sharp fa-solid fa-circle-exclamation text-danger"></i>
+                                                </div>    
+                                                <div class="item-title">
+                                                    <div>New dropdown</div>
+                                                </div>                                                   
+                                                <div class="item-caret">
+                                                    <i class="fas"></i>
+                                                </div>                                                                                     
+                                            </a>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-node disabled" href="#">
+                                                        <div class="item-icon"></div>
+                                                        <div class="item-title" >
+                                                            2nd level dropdown
+                                                        </div>                                                             
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-node" href="#">
+                                                        <div class="item-icon"></div>
+                                                        <div class="item-title" >
+                                                            2nd level dropdown
+                                                        </div>  
+                                                    </a>
+                                                </li>
+                                                <li class="dropdown-submenu">
+                                                    <a class="dropdown-submenu-toggle dropdown-node" href="#">
+                                                        <div class="item-title">
+                                                            Another dropdown 
+                                                        </div>
+                                                        <div class="item-caret">
+                                                            <i class="fas"></i>
+                                                        </div>
+                                                    </a>
+                                                    <ul class="dropdown-menu">
+                                                        <li>
+                                                            <a class="dropdown-node" href="#">
+                                                                <div class="item-title">
+                                                                    3rd level dropdown 
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-node" href="#">
+                                                                <div class="item-title">
+                                                                    3rd level dropdown 
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                    </ul>                                    
+                                </div>
+                            </nav>                                                   
+                        </div>
+                    </div>
+                </div>
+
+                <section style="background:#efefe9;">
+                    <div class="container">
+                        <div class="row">
+                            <div class="board">
+                                <!-- <h2>Welcome to IGHALO!<sup>™</sup></h2>-->
+                                <div class="board-inner">
+                                    <ul class="nav nav-tabs" id="myTab">
+                                        <div class="liner"></div>
+                                        <li class="active">
+                                            <a href="#home" data-toggle="tab" title="welcome">
+                                                <span class="round-tabs one">
+                                                    <i class="glyphicon glyphicon-home"></i>
+                                                </span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#profile" data-toggle="tab" title="profile">
+                                                <span class="round-tabs two">
+                                                    <i class="glyphicon glyphicon-user"></i>
+                                                </span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#messages" data-toggle="tab" title="bootsnipp goodies">
+                                                <span class="round-tabs three">
+                                                    <i class="glyphicon glyphicon-gift"></i>
+                                                </span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#settings" data-toggle="tab" title="blah blah">
+                                                <span class="round-tabs four">
+                                                    <i class="glyphicon glyphicon-comment"></i>
+                                                </span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#doner" data-toggle="tab" title="completed">
+                                                <span class="round-tabs five">
+                                                    <i class="glyphicon glyphicon-ok"></i>
+                                                </span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="tab-content">
+                                    <div class="tab-pane fade in active" id="home">
+                                        <h3 class="head text-center">Welcome to Bootsnipp <sup>™</sup>
+                                            <span style="color:#f48260;">♥</span>
+                                        </h3>
+                                        <p class="narrow text-center"> Lorem ipsum dolor sit amet, his ea mollis fabellas principes. Quo mazim facilis tincidunt ut, utinam saperet facilisi an vim. </p>
+                                        <p class="text-center">
+                                            <a href="" class="btn btn-success btn-outline-rounded green"> start using bootsnipp <span style="margin-left:10px;" class="glyphicon glyphicon-send"></span>
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <div class="tab-pane fade" id="profile">
+                                        <h3 class="head text-center">Create a Bootsnipp <sup>™</sup> Profile </h3>
+                                        <p class="narrow text-center"> Lorem ipsum dolor sit amet, his ea mollis fabellas principes. Quo mazim facilis tincidunt ut, utinam saperet facilisi an vim. </p>
+                                        <p class="text-center">
+                                            <a href="" class="btn btn-success btn-outline-rounded green"> create your profile <span style="margin-left:10px;" class="glyphicon glyphicon-send"></span>
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <div class="tab-pane fade" id="messages">
+                                        <h3 class="head text-center">Bootsnipp goodies</h3>
+                                        <p class="narrow text-center"> Lorem ipsum dolor sit amet, his ea mollis fabellas principes. Quo mazim facilis tincidunt ut, utinam saperet facilisi an vim. </p>
+                                        <p class="text-center">
+                                            <a href="" class="btn btn-success btn-outline-rounded green"> start using bootsnipp <span style="margin-left:10px;" class="glyphicon glyphicon-send"></span>
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <div class="tab-pane fade" id="settings">
+                                        <h3 class="head text-center">Drop comments!</h3>
+                                        <p class="narrow text-center"> Lorem ipsum dolor sit amet, his ea mollis fabellas principes. Quo mazim facilis tincidunt ut, utinam saperet facilisi an vim. </p>
+                                        <p class="text-center">
+                                            <a href="" class="btn btn-success btn-outline-rounded green"> start using bootsnipp <span style="margin-left:10px;" class="glyphicon glyphicon-send"></span>
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <div class="tab-pane fade" id="doner">
+                                        <div class="text-center">
+                                            <i class="img-intro icon-checkmark-circle"></i>
+                                        </div>
+                                        <h3 class="head text-center">thanks for staying tuned! <span style="color:#f48260;">♥</span> Bootstrap </h3>
+                                        <p class="narrow text-center"> Lorem ipsum dolor sit amet, his ea mollis fabellas principes. Quo mazim facilis tincidunt ut, utinam saperet facilisi an vim. </p>
+                                    </div>
+                                    <div class="clearfix"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>                
+            </div>
+        </div>
+        <script>
+            initDropDown();
+        </script>          
+    </body>    
+</html>

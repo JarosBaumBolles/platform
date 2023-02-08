@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>ConEd Authorization Inspector</title>
+</head>
+
+<body>
+	<p>WARNING: This form is used during setup of ConEd customers. If you are not a platform administrator you should
+		not use this page for reasons other than debug.</p>
+	<form action="/connect/1/auth_helper" method="POST">
+		<label for="refresh_token">Refresh token:</label><br>
+		<input id="refresh_token" name="refresh_token" type="text"><br />
+		<label for="subscription_id">Subscription ID:</label><br>
+		<input id="subscription_id" name="subscription_id" type="text"><br /><br />
+		<input value="Inspect" type="submit"><br />
+	</form>
+</body>
+
+</html>

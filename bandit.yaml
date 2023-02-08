@@ -1,0 +1,3 @@
+# FILE: bandit.yaml
+exclude_dirs: ['integration_tests',]
+skips: ['B104',]

@@ -1,0 +1,22 @@
+### IDE ###
+/.pydevproject
+/.project
+/.vscode
+.idea/
+
+### VIRTUAL ENVIRONMENT ###
+env/
+reports/
+temp/
+
+### TEST DATA ###
+integration_tests/data/
+
+### CPYTHON BYTE CODE ###
+__pycache__/
+
+### LIKE REAL DATA ###
+configuration_sample/
+
+.env
+*.ipynb

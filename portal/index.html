@@ -1,0 +1,206 @@
+﻿<!doctype html>
+
+<html lang="en" class="h-100">
+    <head>
+        <title>Hourly Building Monitoring: Home</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/png" href="favicon.png"/>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            
+        <link 
+            rel="stylesheet" 
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta2/css/all.min.css"
+            integrity="sha512-YWzhKL2whUzgiheMoBFwW8CKV4qpHQAEuvilg9FAn5VJUDwKZZxkJNuGM4XkWuk94WCrrwslk8yWNGmY1EduTA==" 
+            crossorigin="anonymous" 
+            referrerpolicy="no-referrer" 
+        />
+        <link href="css/lib/bootstrap/5.1.3/bootstrap.min.css" rel="stylesheet"/>
+        <link href="css/lib/mdb/6.0.0/mdb.css" rel="stylesheet"/>
+        <link href="css/general/background_images.css" rel="stylesheet"/>
+        <link href="css/general/colors.css" rel="stylesheet"/>
+        <link href="css/general/fonts.css" rel="stylesheet"/>
+        <link href="css/general/header.css" rel="stylesheet"/>
+        <link href="css/general/footer.css" rel="stylesheet"/>
+        <link href="css/general/sizes.css" rel="stylesheet"/>
+        <link href="css/home_page.css" rel="stylesheet"/>
+
+        <script src="js/lib/jquery/3.6.0/jquery.min.js"></script>
+        <script src="js/lib/bootstrap/5.1.3/bootstrap.min.js"></script>
+
+        <!-- Google tag (gtag.js) -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-7RRNLB78JW"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-7RRNLB78JW');
+        </script>
+        <script src="js/general/home/home.js"></script>
+
+    </head>
+    <body>
+        <div class="d-flex flex-column overflow-hidden min-vh-100 vh-100 bg-body">
+            <header>
+				<nav class="navbar navbar-expand-lg navbar-jbb bg-jbb-blue fw-bold">
+					<!-- Container wrapper -->
+					<div class="container-fluid">
+						<!-- Toggle button -->
+						<button
+							class="navbar-toggler"
+							type="button"
+							data-mdb-toggle="collapse"
+							data-mdb-target="#navbarSupportedContent"
+							aria-controls="navbarSupportedContent"
+							aria-expanded="false"
+							aria-label="Toggle navigation"
+							>
+						<i class="fas fa-bars"></i>
+						</button>
+						<!-- Collapsible wrapper -->
+						<div class="collapse navbar-collapse" id="navbarSupportedContent">
+							<!-- Navbar brand -->
+							<!-- Left links -->
+							<ul class="navbar-nav me-auto fs-pt-16 mb-2 mb-lg-0">
+								<li class="nav-item">
+									<a class="nav-link align-middle active" aria-current="page" href="/">
+										HOME
+									</a>
+								</li>
+								<li class="nav-item">
+									<a class="nav-link align-middle" href="/public_dashboard/index.html">
+										PUBLIC DASHBOARD
+									</a>
+								</li>
+								<li class="nav-item">
+									<a class="nav-link align-middle" href="/portal/index.html">
+										ADMINISTRATIVE PORTAL
+									</a>
+								</li>
+								<li class="nav-item">
+									<a 
+										class="nav-link align-middle" 
+										href="mailto: contact@benchmark8760.org" 
+										target="_blank"
+									>
+										CONTACT US
+									</a>
+								</li>								
+							</ul>
+							<!-- Left links -->
+							<!-- Right elements -->
+							<div class="d-flex align-items-center pe-3">
+								<ul class="navbar-nav fs-pt-16 me-auto mb-2 mb-lg-0">
+									<li class="nav-item">
+										<a class="nav-link align-middle" href="/private_dashboard/index.html">
+											PARTICIPANT DASHBOARD
+										</a>
+									</li>
+								</ul>
+							</div>							
+							<!-- Right elements -->							
+						</div>
+						<!-- Collapsible wrapper -->
+					</div>
+					<!-- Container wrapper -->
+				</nav>
+				<!-- Navbar -->				
+			</header>            
+            <div class="sub-header container-fluid d-flex flex-column flex-grow-1 bg-bd-io-30">
+                <div class="row flex-shrink-0">
+                    <div class="d-flex h-px-200 p-0">
+                        <div class="w-px-30 border-bottom border-5 border-blue"></div>
+                        <div class="w-px-140 border-bottom border-5 border-blue">
+                            <img src="images/tower_example.png" class="fh-logo-img"/>
+                        </div>
+                        <div class="w-px-30 border-bottom border-5 border-blue"></div>
+                        <div class="w-px-600 border-bottom border-5 border-blue">
+                            <!-- <img src="images/bencmark_text.png" class=""/> -->                            
+                            <div class="container-fluid d-flex flex-column h-100">                                
+                                <div>
+                                    <span class="text-jbb-blue fw-bold trade-title">BENCHMARK </span>
+                                    <span class="text-jbb-yellow fw-bold trade-title">8760</span>
+                                </div>
+                                <div class="text-jbb-blue">
+                                    An initiative to explore how <b>hourly data</b> can improve building
+                                </div>
+                                <div class="text-jbb-blue">
+                                    benchmarking to be more precise, fair, and actionable in
+                                </div>
+                                <div class="text-jbb-blue">
+                                    support of an affordable, low-carbon future
+                                </div>
+                            </div>
+                        </div>
+                        <div class="w-px-535 border-bottom border-5 border-blue"></div>
+                        <div class="flex-fill"></div>
+                    </div>
+                </div>
+
+                <div class="flex-grow-1 flex-column d-flex">
+                    <div class="row flex-fill">
+                        <div class="col overflow-auto flex-shrink-1 position-relative p-0">
+                            <div class="position-absolute w-100">
+
+                                <!-- Fact Sheet Section -->
+                                <div id="fact-sheet" class="container-wrapper d-flex flex-grow-1 border-bottom border-5 border-blue">
+                                    <div class="fcsht-image">
+                                        <a href="https://benchmark8760.org/JBB%2014492%20Benchmarking%20Fact%20Sheet.pdf">
+                                        <img src="/images/fact-sheet.jpg" class="fcsht-image"/>
+                                        </a>
+                                    </div>
+                                    <div class="container-fluid d-flex flex-column flex-grow-1 p-0 ps-px-50">
+                                        <div class="flex-fill"></div>
+                                        <div class="flex-shrink-0 fcsht-btn-label">Want to learn more?</div>
+                                        <div class="flex-shrink-0">
+                                            <a href="https://benchmark8760.org/JBB%2014492%20Benchmarking%20Fact%20Sheet.pdf"
+                                                class="btn border-2 fcsht-btn-outline mt-4" role="button" target="_blank">
+                                            Download our fact sheet
+                                            </a>
+                                        </div>
+                                        <div class="flex-fill"></div>
+                                    </div>
+                                </div>
+                                <!-- Fact Sheet Section End -->
+
+                                <!-- Thought Leadership Section -->
+                                <div class="container-wrapper">
+                                    <div class="title text-jbb-yellow fw-bold">
+                                        Thought Leadership
+                                    </div>
+                                </div>
+
+                                <div id="flex-grid-wrapper" class="container-wrapper">
+                                    <div id="flex-grid"></div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="jnbb-footer d-flex justify-content-between align-items-center">
+                <div class="flex-column">
+                    <div class="d-flex">
+                        Administered and managed by JB&B&nbsp;|&nbsp;<a href="https://www.jbb.com" target="_blank">www.jbb.com</a>
+                    </div>
+                    <div class="d-flex">
+                        Supported by NYSERDA&nbsp;|&nbsp;<a href="https://www.nyserda.ny.gov" target="_blank">www.nyserda.ny.gov</a>
+                    </div>
+                </div>
+                <div class="flex-column">
+                    <div class="d-flex justify-content-end">
+                        Need help or have questions?
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        Reach out to&nbsp;<a href="mailto:support@benchmark870.org" target="_blank">support@benchmark870.org</a>
+                    </div>
+                </div>
+                <img src="/images/footer-img.png" />
+            </footer>
+        </div>
+    </body>
+</html>

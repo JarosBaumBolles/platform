@@ -1,0 +1,25 @@
+# TODO: identify bucket by reading function permissions
+# TODO: assign names for bucket files without reading an argument
+# TODO: Optional compression support
+# TODO: background functions? Do not return anything? (fixme)
+# TODO: JSON schema validation
+# TODO: bulk upload
+# TODO: async dispatchers
+# TODO: get participants for deployment programmatically
+# TODO: async participant deployment to speed up process
+# TODO: partial requirements.txt: https://www.python.org/dev/peps/pep-0508/
+# TODO: Use monitoring to minimize RAM footprint
+# TODO: DOCS: bq rm --table develop-epbp:standardized.buildings
+# TODO: DOCS: bq rm --table develop-epbp:standardized.environments && bq mk --table develop-epbp:standardized.environments ~/workspace/HourlyBuildingDataPlatform/standardization/database_schema/environments.json
+# TODO: Guess Pythonpath automatically in deploy_ctl
+# TODO: rewrite reset script with python packages and no gcloud utils so that deploy_ctl can integrate this logic
+# TODO: account for environments in buckets (via subdirectories)
+# TODO: use directories for wattime: region/type (marginal or average)??? or no type?
+# TODO; fix reset schema script to add participant0 with Viewer and Updater permissions after tables are created
+# TODO: Set periods in wattime average emissions as we get a lot of data we do not need
+# TODO: Cumulative path resolving in GCP load balancer does not work - investigate
+# TODO: Implement redirect: #from flask import redirect; #url = prepare_redirect(SCOPE_URL) #return redirect(url); def prepare_redirect(scope_url): return DOMAIN + '?' + urlencode({'scope': TEST_SCOPE_PATH})
+# TODO: DDoS warning - scheduler is available publicly
+# TODO: Global refactoring: get_bucket => bucket, get_blob => blob. Minimizes GCP usage costs and speeds up execution.
+# TODO: define DW generation period
+# TODO: remove temp feels like from DW and standardized data?

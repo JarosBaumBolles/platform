@@ -1,0 +1,25 @@
+footer.jnbb-footer {
+    height: 60px;
+    color: var(--jbb-white);
+    background-color: var(--jbb-footer-blue);
+    font-size: 14px;
+    padding: 0 50px;
+}
+
+footer.jnbb-footer a {
+    color: var(--jbb-white);
+    text-decoration: none;
+}
+
+footer.jnbb-footer img {
+    position: absolute;
+    width: 590px;
+    bottom: 0;
+    left: calc(50% - 295px);
+}
+
+@media (max-width: 1400px) {
+    footer.jnbb-footer img {
+        display: none;
+    }
+}

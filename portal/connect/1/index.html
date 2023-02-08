@@ -1,0 +1,61 @@
+<html><head>
+	<meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+	<meta content="utf-8" http-equiv="encoding">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>
+	<script>
+		function loginResults() {
+			form = document.getElementById("LoginForm");
+			var participant_id = form.ParticipantID.value;
+			var password_hash = CryptoJS.MD5(form.Password.value);
+			document.cookie = "participant=" + participant_id + "," + password_hash + "; SameSite=None; Secure";
+			window.location = 'https://hourlybuildingdata.com/connect/1/scope';
+		}
+		function login() {
+			form = document.getElementById("LoginForm");
+			var participantId = form.ParticipantID.value;
+			var password = form.Password.value;
+			var xmlhttp = new XMLHttpRequest();
+			xmlhttp.open("post", "authenticate", true);
+			xmlhttp.onreadystatechange = function () {
+				if (xmlhttp.readyState == 4) {
+					if (xmlhttp.status == 200) {
+						loginResults();
+					} else {
+						document.cookie = 'participant=; Max-Age=0'
+						alert("The login information you entered does not match an account in our records. Please try again.");
+					}
+				}
+			}
+			xmlhttp.setRequestHeader('Content-type', 'application/json; charset=utf-8');
+			xmlhttp.send(JSON.stringify({"participant_id": participantId, "password": password}));
+			return false;
+		};
+		function init() {
+			document.getElementById('LoginForm').onsubmit = login;
+		};
+		window.onload = init;
+	</script>
+</head>
+
+<body>
+	<div class="container">
+
+		<!-- <h3>Redirecting to project participant scope selection page</h3> -->
+
+		<form id="LoginForm" onsubmit="return login();">
+			<h1>Login Page</h1>
+			<div class="FormRow">
+				<label for="ParticipantID">Participant ID:</label>
+				<input type="text" size="15" id="ParticipantID" name="ParticipantID">
+			</div>
+			<div class="FormRow">
+				<label for="Password">Password:</label>
+				<input type="password" size="15" id="Password" name="Password">
+			</div>
+			<div class="FormRow" id="LoginButtonDiv">
+				<input type="submit" value="Login">
+			</div>
+		</form>
+
+	</div>
+</body></html>
