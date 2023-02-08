@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+Selected Energy Star Portfolio Manager XML Schema files that are referenced in the Project.
+Full ESPM Schema is available at https://portfoliomanager.energystar.gov/webservices/home/api
+Target Namespace was added by the Project; the namespace URL is invented by the Project and is not ednorsed or provided by ESPM 
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" version="15.0" targetNamespace="http://portfoliomanager.energystar.gov/ns">
+    <!-- in the ESPM property.xsd the xs:all for property propertyType is replaced with xs:sequence to allow multiple uses per property -->
+    <xs:include schemaLocation="property/property.xsd"/>
+    <xs:include schemaLocation="meter/meterConsumptionData.xsd"/>
+    <xs:include schemaLocation="association/association.xsd"/>
+    <xs:include schemaLocation="propertyUse/characteristics.xsd"/>
+    <xs:include schemaLocation="common/links.xsd"/>
+    <xs:include schemaLocation="account/account.xsd"/>
+</xs:schema>

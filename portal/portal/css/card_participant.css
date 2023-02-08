@@ -1,0 +1,95 @@
+.badge.bage-participant-config i{
+    font-size: 0.85rem;
+}
+
+.property-container .property-section > *{
+    font-size: 0.875rem!important;
+    padding-right: 0.25rem;
+    max-height: 24rem;
+}
+
+.badge-property-meter {
+    max-width: 15!important;
+}
+
+.property-container .property-section .property-info-item{
+    font-size: 0.75rem !important;
+    max-width: 15rem;
+}
+
+.property-container .property-section:not(:first-child):not(:last-child){
+    padding-left: 0.25rem;
+}
+
+
+.meter-pushes-container > *,
+.meter-detail-container > * {
+    font-size: 1rem;
+}
+
+
+.property-container .property-section,
+.meter-pushes-container .meter-pushes-section,
+.meter-detail-container .meter-section {
+
+    max-height: 24rem!important;
+}
+
+
+.property-container .property-section:first-child,
+.meter-pushes-container .meter-pushes-section:first-child,
+.meter-detail-container .meter-section:first-child {
+    padding-right: 0.25rem;
+}
+
+
+.meter-pushes-container .meter-pushes-section:not(:first-child):not(:last-child),
+.meter-detail-container .meter-section:not(:first-child):not(:last-child) {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+}
+
+.property-container .property-section:last-child,
+.meter-pushes-container .meter-pushes-section:last-child,
+.meter-detail-container .meter-section:last-child {
+    padding-left: 0.25rem; 
+}
+
+.meter-pushes-container .meter-pushes-section .list-group.list-files,
+.meter-detail-container .meter-section .list-group.list-files {
+    overflow: auto;
+}
+
+
+.meter-pushes-container  .meter-pushes-section.meter-description-pushes-section{
+    max-width: 33%;
+}
+
+.meter-pushes-container  .meter-pushes-section.meter-description-pushes-section .note{
+    font-size: 0.75rem;
+}
+
+.accordion .accordion-item.participan-meters-accordion-item .accordion-body{
+    max-height: 35rem!important;
+}
+
+.accordion .accordion-body .list-group > .list-group-item{
+    padding-left: 0.1255rem;
+    padding-right: 0.1255rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+
+.accordion .accordion-body {
+    padding-top: 0.5rem!important;
+    padding-bottom: 0.5rem!important;
+    padding-left: 0.5rem!important;
+    padding-right: 0.5rem!important;
+}
+
+/* .meter-detail-container .meter-section:not(:first-child):before {
+    content: "";
+    border: 1px solid #0f0f0f;
+    align-self: stretch;
+} */

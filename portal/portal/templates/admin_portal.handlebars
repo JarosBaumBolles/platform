@@ -1,0 +1,1088 @@
+{{#*inline "downloadPartial"}}
+    <a id="{{prefix}}_button_{{idx}}"
+       class="link-button"
+       data-bucket="{{bucket}}"
+       data-path="{{fileName}}"
+       data-link="{{prefix}}_link_{{idx}}"
+       onclick="download_from_bucket(event)">
+        {{text}}
+    </a>
+
+    <a download="{{filename}}"
+       id="{{prefix}}_link_{{idx}}"
+       style="display: none;">
+        Save XML
+    </a>
+{{/inline}}
+
+{{#*inline "uploadPartial"}}
+    <label class="link-button" for="{{prefix}}_upload_label_{{idx}}">{{text}}</label>
+    <input type="file"
+           id="{{prefix}}_upload_label_{{idx}}"
+           style="display: none;"
+           data-status="{{prefix}}_upload_status_{{idx}}"
+           data-bucket="{{bucket}}"
+           data-path="{{fileName}}"
+           onchange='uploadToStorageBucket(event)'
+           multiple />
+    <span id="{{prefix}}_upload_status_{{idx}}" class="message"></span>
+{{/inline}}
+
+
+{{#*inline "linkNewPage"}}
+    <a id="property_dashboard_button_{{idx}}"
+        class="link-button"
+        href={{dataStudioLink}}
+        target="_blank"
+    >
+        Property Dashboard
+    </a>
+
+{{/inline}}
+
+
+{{#*inline "Divider"}}
+    <div class="ps-1 pe-1 h-100">
+        <div class="vr h-100"></div>
+    </div>
+{{/inline}}
+
+<div class="d-flex flex-row flex-grow-1 align-items-center justify-content-center mb-1">
+    <div class="flex-shrink-1">
+        <div class="note note-primary pt-1 pb-1">
+            <p class="mb-0">
+                You have access to the following participants, given your membership in the corresponding participant-specific user groups
+            </p>
+        </div>
+    </div>
+    <div class="flex-fill"></div>
+    <div class="flex-shrink-1">
+        <div class="note note-primary pt-1 pb-1">
+            <p class="mb-0">
+                Updated from Google Data Warehouse <strong>Hourly</strong>        
+            </p>
+        </div>        
+    </div>
+</div>
+
+
+{{#*inline "DownloadFile"}}
+    <a
+        id="{{prefix}}_button_{{idx}}"
+        class="btn btn-tag btn-rounded btn-outline-secondary text-white"
+
+        data-bucket="{{bucket}}"
+        data-path="{{fileName}}"
+        data-link="{{prefix}}_link_{{idx}}"
+        onclick="download_from_bucket(event)"
+
+        data-mdb-toggle="tooltip" 
+        data-mdb-placement="right"
+        title="Googlel bucket assigned to the Participant"
+    >
+        <i class="fa-sharp fa-solid fa-download"></i>
+        {{text}}
+    </a>
+    <a download="{{filename}}"
+    id="{{prefix}}_link_{{idx}}"
+    style="display: none;">
+        Save XML
+    </a> 
+{{/inline}}
+
+
+{{#*inline "DownloadDropDownNode"}}
+ <li>
+    <a 
+        class="dropdown-node" 
+        id="{{_id}}"
+        title="Configuration file is located at gs://{{_bucket}}/{{_name}}"                
+        data-bucket="{{_bucket}}"
+        data-path="{{_name}}"
+        data-link="{{_link}}"
+        onclick="download_from_bucket(event)"                               
+        href="#"
+    >
+        <div class="item-icon">
+            <i class="bi bi-download"></i>
+        </div>
+        <div class="item-title">
+            {{_title}}
+        </div>
+        <div class="item-caret"></div>                                          
+    </a>
+</li>
+{{/inline}}
+
+
+{{#*inline "ParticipantDashboardMenu"}}
+    <nav class="navbar navbar-dropdown navbar-light navbar-rounded navbar-outline">
+        <div class="btn-group dropstart">
+            <button 
+                class="btn btn-default dropdown-toggle" 
+                type="button" 
+                data-mdb-toggle="dropdown"
+            >
+                <div class="dropdown-icon">              
+                    {{#unless validation.length}}
+                        <i class="bi bi-check-square-fill success"></i>
+                    {{else}}
+                        <i class="bi bi-exclamation-square-fill danger"></i>
+                    {{/unless}}                                             
+                </div>
+                <div class="dropdown-title" >Participant Configuration</div>
+                <div class="dropdown-caret">
+                    <i class="fas"></i>
+                </div>
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a 
+                        class="dropdown-node" 
+                        id="download_config_{{idx}}"
+                        title="Configuration file is located at gs://{{bucket}}/{{fileName}}"                
+                        data-bucket="{{bucket}}"
+                        data-path="{{fileName}}"
+                        data-link="{{prefix}}_link_{{idx}}"
+                        onclick="download_from_bucket(event)"                               
+                        href="#"
+                    >
+                        <div class="item-icon">
+                            <i class="bi bi-download"></i>
+                        </div>
+                        <div class="item-title">
+                            Save XML
+                        </div>
+                        <div class="item-caret"></div>                                          
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                {{#unless validation.length}}
+                    <li class="dropdown-submenu">
+                        <a class="dropdown-submenu-toggle dropdown-node disabled" href="#">      
+                            <div class="item-icon">
+                                {{!-- <i class="fa-sharp fa-solid fa-circle-exclamation text-danger"></i> --}}
+                                <span class="badge badge-success">0</span>
+                            </div>    
+                            <div class="item-title">
+                                <div>{XML Errors}</div>
+                            </div>
+                            <div class="item-caret">
+                                <i class="fas"></i>
+                            </div>                                                                                     
+                        </a>                    
+                    </li>
+                {{else}}
+                    <li class="dropdown-submenu">
+                        <a class="dropdown-submenu-toggle dropdown-node" href="#">      
+                            <div class="item-icon">                                                     
+                                {{!-- <i class="fa-sharp fa-solid fa-circle-exclamation text-danger"></i> --}}
+                                <span class="badge badge-danger">{{validation.length}}</span>
+                            </div>    
+                            <div class="item-title">
+                                <div>XML Errors</div>
+                            </div>                                                   
+                            <div class="item-caret">
+                                <i class="fas"></i>
+                            </div>                                                                                     
+                        </a> 
+                        <ul class="dropdown-menu">
+                            {{#each validation}}
+                                <li>
+                                    <a class="dropdown-node" href="#">
+                                        <div class="item-icon">
+                                            <i class="fas fa-exclamation-triangle text-danger"></i>
+                                        </div>
+                                        <div class="item-title">{{.}}</div>
+                                        <div class="item-caret"></div>
+                                    </a>
+                                </li>                            
+                            {{/each}}
+                        </ul>                   
+                    </li>                
+                {{/unless}}     
+            </ul>        
+        </div>
+    </nav>
+{{/inline}}
+
+
+{{#*inline "AccessCodesMenu"}}
+    <nav class="navbar navbar-dropdown navbar-light navbar-rounded navbar-outline">
+        <div class="btn-group dropstart">
+            <button 
+                class="btn btn-default dropdown-toggle {{#unless codes.length}}disabled{{/unless}}" 
+                type="button" 
+                data-mdb-toggle="dropdown"
+                title="Access codes obtained from metered data providers"
+            >
+                <div class="dropdown-icon">              
+                    <span 
+                        class="
+                            badge 
+                            {{#unless codes.length}}
+                                badge-light
+                            {{else}}
+                                badge-secondary
+                            {{/unless}} 
+                                rounded-pill
+                        ">{{codes.length}}
+                    </span>                                      
+                </div>
+                <div class="dropdown-title" >Access Codes</div>
+                <div class="dropdown-caret">
+                    <i class="fas"></i>
+                </div>
+            </button>
+            {{#if codes.length}}
+                <ul class="dropdown-menu">
+                    {{#each codes}}
+                        <li>
+                            <a 
+                                class="dropdown-node" 
+                                {{!-- id="{{prefix}}_button_{{idx}}" --}}
+                                title="Access code file. Located at gs://{{cfg.bucket}}/{{name}}"                
+                                data-bucket="{{cfg.bucket}}"
+                                data-path="{{name}}"
+                                {{!-- data-link="{{prefix}}_link_{{idx}}" --}}
+                                onclick="download_from_bucket(event)"                               
+                                href="#"
+                            >
+                                {{!-- <a download="{{filename}}" id="{{prefix}}_link_{{idx}}" class="visually-hidden;"></a> --}}
+                                <div class="item-icon">
+                                    <i class="bi bi-download"></i>
+                                </div>
+                                <div class="item-title">
+                                    {{baseName}}
+                                </div>
+                                <div class="item-caret"></div>                                          
+                            </a>
+                        </li>                    
+                    {{/each}}
+                </ul>            
+            {{/if}}
+        </div>
+    </nav>
+{{/inline}}
+
+
+{{#*inline "CardToggler"}}
+    <a
+        class="text-{{color}}"
+        data-mdb-toggle="collapse"
+        href="#collapse_{{idx}}"
+        role="button"
+        aria-expanded="true"
+        aria-controls="collapseExample"
+    >
+        <i class="fa-solid"></i>
+    </a>  
+{{/inline}}
+
+{{#*inline "FilesNotLoaaded"}}
+    <ul class="list-group list-group-light list-files mb-2 ms-3 me-3">
+        <li class="list-group-item d-flex flex-row justify-content-center align-items-center">
+            <div class="flex-shrink-0">
+                <div class="ps-3 pe-3 badge-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+            </div>   
+            <div class="flex-grow-1 ms-4">
+                <p class="fw-bold mb-1">Files are not uploaded</p>
+            </div>
+            
+        </li>                       
+    </ul>
+{{/inline}}
+
+
+{{#*inline "MeterCard"}}
+    <div class="card border border-secondary shadow-0 rounded-0 mb-1">
+        <div class="card-header bg-light pt-0 pb-0 ps-1 pe-1">
+            <div class="d-flex flex-row justify-content-between">
+                <div class="d-flex flex-row justify-content-start flex-grow-1 justify-content-between align-items-center ms-2">
+                    <div class="d-flex align-items-center flex-row ps-1 pe-1 meter-title">
+                        <div>
+                            <iconify-icon icon="{{icon_type}}" class ="fs-3"></iconify-icon>
+                        </div>
+                        <div class="" title="{{type}}">
+                            {{short_uri}}
+                        </div>
+                    </div>    
+                    <div class="d-flex flex-row align-items-center m-2">
+                        <div class="badge badge-dark rounded-0">Last Updated:</div>
+                        {{#if lastUpdateHoursHumanized}}
+                            <div class="badge badge-{{status}} rounded-0">{{lastUpdateHoursHumanized}} ago</div>
+                        {{else}}
+                            <div class="badge badge-danger rounded-0">Not Available</div>
+                        {{/if}}
+                    </div>
+                </div>
+                <div class="d-flex flex-row justify-content-start align-items-center ms-4 me-2">
+                    {{> CardToggler color="dark"}} 
+                </div>
+            </div>
+        </div>
+        <div class="card-body collapse" id="collapse_{{idx}}">
+            <div class="d-flex flex-row flex-grow-1 justify-content-start meter-detail-container">
+                <section class="d-flex flex-column meter-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">Meter General Information</h6>
+                    <ul class="list-group list-group-light mb-2">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Type:
+                            <span class="badge badge-secondary rounded-0">{{type}}</span>                            
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Exp. updates:
+                            <span class="badge badge-secondary rounded-0">{{updateFrequency}}</span>                               
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Last Updated:
+                            {{#if lastUpdateHoursHumanized}}
+                                <span class="badge badge-{{status}} rounded-0">{{lastUpdateHoursHumanized}} ago</span>
+                            {{else}}
+                                <span class="badge badge-danger rounded-0">Not Available</span>
+                            {{/if}}
+                        </li>       
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Haystack:
+                            <span class="badge badge-secondary rounded-0">{{haystack}}</span>                                  
+                        </li>         
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Problems:
+                            {{#unless validation}}
+                                <span class="badge badge-success rounded-0">{{validation.length}}</span>
+                            {{else}}
+                                <span class="badge badge-warning rounded-0">{{validation.length}}</span>
+                            {{/unless}}
+                                                              
+                        </li>
+                    </ul>
+                </section>
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-grow-1 justify-content-start meter-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">Meter Actions</h6>
+                    <ul class="list-group list-group-light mb-2 ms-3 me-3">
+                        <li class="list-group-item d-flex flex-column justify-content-center align-items-center p-1">
+                            <div class="flex-shrink-0 mb-2 ms-2">
+                                <a 
+                                    class="btn btn-lg btn-link" 
+                                    title="Access code file. Located at gs://{{bucket}}/{{fileName}}"                
+                                    data-bucket="{{bucket}}"
+                                    data-path="{{fileName}}"
+                                    onclick="download_from_bucket(event)"                               
+                                    href="#"
+                                >
+                                    Download Meter Config                                                                
+                                </a> 
+                            </div>                            
+                        </li>
+                        
+                        <li class="list-group-item d-flex flex-column justify-content-center align-items-center p-1">
+                            <div class="mb-2 ms-2">
+                                <label class="btn btn-lg btn-link" for="meter_config_upload_label_{{idx}}">Update Meter Config</label>
+                                <input type="file"
+                                    id="meter_config_upload_label_{{idx}}"
+                                    style="display: none;"
+                                    data-status="meter_cfg_upload_status_{{idx}}"
+                                    data-bucket="{{bucket}}"
+                                    data-path="{{fileName}}"
+                                    onchange='uploadToStorageBucket(event)'
+                                    multiple />
+                                <span id="meter_cfg_upload_status_{{idx}}" class="message"></span>                                    
+                            </div>
+
+                        </li>
+                    </ul>                    
+                </section>                
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-grow-1 justify-content-start meter-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">Meter Latest Data Files</h6>
+                    {{#if stdFiles.length}}
+                        <ul class="list-group list-group-light list-files mb-2 ms-3 me-3">
+                            {{#each stdFiles}}
+                                <li class="list-group-item d-flex flex-row justify-content-start align-items-center">
+                                    <div class="flex-shrink-0 ps-2 pe-2">
+                                       <i class="fs-2 bi bi-filetype-xml"></i>
+                                    </div>  
+                                    <div class="flex-grow-1 ps-2 pe-2 fs-1 fw-bold text-center">
+                                        {{baseName}}
+                                    </div> 
+                                    <div class="flex-shrink-0 ps-2 pe-2">
+                                        <a 
+                                            class="dropdown-node" 
+                                            title="Access code file. Located at gs://{{bucket}}/{{name}}"                
+                                            data-bucket="{{bucket}}"
+                                            data-path="{{name}}"
+                                            onclick="download_from_bucket(event)"                               
+                                            href="#"
+                                        >
+                                            Download                                                                     
+                                        </a> 
+                                    </div>
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{else}}
+                        {{> FilesNotLoaaded}}
+                    {{/if}}
+                </section>
+                <div class="vr vr-blurry align-self-stretch"></div>
+            </div>
+        </div>
+    </div>
+{{/inline}}
+
+
+{{#*inline "PushesCard"}}
+    <div class="card border border-secondary shadow-0 rounded-0 mb-1">
+        <div class="card-header bg-light pt-0 pb-0 ps-1 pe-1 rounded-0">
+            <div class="d-flex flex-row justify-content-between">
+                <div class="d-flex flex-row justify-content-start flex-grow-1 justify-content-between align-items-center ms-2">
+                    <div class="d-flex align-items-center flex-row meter-title">
+                        <div class="me-2">
+                            <i class="fa fa-upload" aria-hidden="true"></i>
+                        </div>
+                        <div class="ms-2 me-2" title="{{description}}">
+                            {{connectorName}}
+                        </div>
+                    </div>    
+                </div>
+                <div class="d-flex flex-row justify-content-start align-items-center ms-4 me-2">
+                    {{> CardToggler color="dark"}} 
+                </div>
+            </div>
+        </div>
+        <div class="card-body collapse" id="collapse_{{idx}}">
+            <div class="d-flex flex-row flex-grow-1 justify-content-start meter-pushes-container">
+                <section class="d-flex flex-column ms-2 meter-pushes-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">Meter Information</h6>
+                    <ul class="list-group list-group-light mb-2">
+                        {{#each meterURIs}}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div class="ms-2 me-2">
+                                    <iconify-icon icon="{{icon_type}}" class ="fs-3"></iconify-icon>                                    
+                                </div>
+                                <div class="ms-2 me-2">
+                                    <span>{{meterUri}}</span>
+                                </div>
+                                <div class="ms-2 me-2">
+                                    <span class="fs-1 badge badge-secondary rounded-0">{{type}}</span>
+                                </div>
+                            </li>
+                        {{/each}}
+                    </ul>                
+                </section>
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-grow-1 justify-content-start meter-pushes-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">Previous Uploads</h6>
+                        {{#if uploads.length}}
+                        <ul class="list-group list-group-light list-files mb-2 ms-3 me-3">
+                            {{#each uploads}}
+                                <li class="list-group-item d-flex flex-row justify-content-start align-items-center">
+                                    <div class="flex-shrink-0 ps-2 pe-2">
+                                       <i class="fs-2 bi bi-filetype-xml"></i>
+                                    </div>  
+                                    <div class="flex-grow-1 ps-2 pe-2 fs-1 fw-bold text-center">
+                                        {{.}}
+                                    </div> 
+                                    <div class="flex-shrink-0 ps-2 pe-2">
+                                        <a 
+                                            title="The {{meterUri}} raw data file. Located at gs://{{bucket}}/{{fileName}}"                
+                                            data-bucket="{{bucket}}"
+                                            data-path="{{fileName}}/{{.}}"
+                                            onclick="download_from_bucket(event)"                               
+                                            href="#"
+                                        >
+                                            Download                                                                     
+                                        </a> 
+                                    </div>
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{else}}
+                        {{> FilesNotLoaaded}}
+                    {{/if}}                    
+                </section>                
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-shrink-0 justify-content-start meter-pushes-section meter-description-pushes-section">
+                    <div class="d-flex flex-column">
+                        <h6 class="bg-light p-2 border-top border-bottom text-center">Description</h6>
+                        <ul class="list-group list-group-light mb-2 ms-3 me-3">
+                            <li class="list-group-item d-flex flex-row justify-content-start align-items-center">
+                                <div class="text-truncate" title="{{description}}">{{description}}</div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="d-flex flex-column">
+                        <h6 class="bg-light p-2 border-top border-bottom text-center">Upload Meters Data</h6>
+                        <ul class="list-group list-group-light mb-2 ms-3 me-3">
+                            <li class="list-group-item d-flex flex-column justify-content-start align-items-center p-1">
+                                <div class="mb-2 ms-2">
+                                    <label class="btn btn-lg btn-link" for="push_upload_label_{{idx}}">Add Metered Data</label>
+                                    <input type="file"
+                                        id="push_upload_label_{{idx}}"
+                                        style="display: none;"
+                                        data-status="push_upload_status_{{idx}}"
+                                        data-bucket="{{bucket}}"
+                                        data-path="{{fileName}}"
+                                        onchange='uploadToStorageBucket(event)'
+                                        multiple />
+                                    <span id="push_upload_status_{{idx}}" class="message"></span>                                    
+                                </div>
+
+                                <div class="flex-shrink-1">
+                                    <div class="note note-info p-1">
+                                        <p class="mb-0">
+                                            One or more files can be selected, to appear named like this: raw-data-0-{{@root.now}} ...
+                                        </p>
+                                    </div>
+                                </div>
+                            </li>
+                        </ul>                        
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+{{/inline}}
+
+
+{{#*inline "PropertiesCard"}}
+    <div class="card border border-secondary shadow-0 rounded-0 mb-1">
+        <div class="card-header bg-light pt-0 pb-0 ps-1 pe-1 rounded-0">
+            <div class="d-flex flex-row justify-content-between">
+                <div class="d-flex flex-row justify-content-start flex-grow-1 justify-content-between align-items-center ms-2">
+                    <div class="d-flex align-items-center flex-row meter-title">
+                        <div class="me-2 mt-2">
+                            <i class="fs-2 fas fa-building" aria-hidden="true"></i>
+                        </div>
+                        <div class="ms-2 me-2" title="{{address}}">
+                            {{name}}
+                        </div>
+                    </div>    
+                </div>
+                <div class="d-flex flex-row justify-content-start align-items-center ms-4 me-2">
+                    {{> CardToggler color="dark"}} 
+                </div>
+            </div>
+        </div>
+        <div class="card-body collapse" id="collapse_{{idx}}">
+            <div class="d-flex flex-row flex-grow-1 align-items-stretch property-container">
+                <section class="d-flex flex-column property-section flex-shrink-1">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">
+                        Property Information
+                    </h6>
+                    <ul class="list-group list-group-light mb-2 overflow-auto">
+                        <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                            <div class="pe-1 flex-shrink-1"><strong>Address:</strong></div>
+                            <div class="badge badge-secondary rounded-0 property-info-item" title="{{address}}">{{address}}</div>
+                        </li>
+
+                        <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                            <div class="pe-1 flex-shrink-1"><strong>Bucket:</strong></div>                            
+                            <div class="ps-1 pe-1">
+                                <a
+                                    class="btn btn-link p-0 property-info-item text-nowrap text-truncate text-primary"
+                                    href="https://console.cloud.google.com/storage/browser/{{bucket}};tab=objects?forceOnBucketsSortingFiltering=false&project={{env}}&prefix=&forceOnObjectsSortingFiltering=false"
+                                    target="_blank"
+                                    data-mdb-toggle="tooltip" 
+                                    data-mdb-placement="right"
+                                    title="Property's Google Storage Bucket: gs://{{bucket}}"
+                                >
+                                    {{bucket}}
+                                    
+                                </a>
+                            </div>  
+                            <div class="ms-2">
+                                <i class="fs-1 fas fa-external-link-alt text-primary"></i>
+                            </div>
+                        </li>
+
+                        <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                            <div class="pe-1"><strong>Dashboard:</strong></div>
+                            <div class="ps-1 pe-1 flex-shrink-1">
+                                <a
+                                    class="btn btn-link p-0 property-info-item text-nowrap text-truncate text-primary"
+                                    title="The {{name}} property configuration file. Located at gs://{{bucket}}/{{fileName}}"                
+                                    id="property_dashboard_button_{{idx}}"
+                                    class="link-button"
+                                    href={{dataStudioLink}}
+                                    target="_blank"                               
+                                >
+                                    {{address}}                                    
+                                </a>
+                            </div>  
+                            <div class="ms-2">
+                                <i class="fs-1 fas fa-external-link-alt text-primary"></i>
+                            </div>                            
+                        </li>                          
+                        <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                            <div class="pe-1 flex-shrink-1"><strong>Configuration:</strong></div>
+                            <div class="ps-1 pe-1 flex-shrink-2">
+                                <a
+                                    class="btn btn-link p-0 property-info-item text-nowrap text-truncate text-primary"
+                                    title="The {{name}} property configuration file. Located at gs://{{bucket}}/{{fileName}}"                
+                                    data-bucket="{{bucket}}"
+                                    data-path="{{fileName}}"
+                                    onclick="download_from_bucket(event)"    
+                                    title="{{fileName}}"                           
+                                    href="#"                                    
+                                >
+                                    {{fileName}}
+                                    
+                                </a>
+                            </div>  
+                            <div class="ms-2">
+                                <i class="fs-1 fas fa-download text-primary"></i>
+                            </div>                                 
+                        </li>
+
+                        <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                            <div class="pe-1"><strong>Haystack tags:</strong></div>
+                            <div class="ps-1 pe-1 flex-shrink-1">
+                                <div class="badge badge-secondary rounded-0 property-info-item" title="{{haystack}}">{{haystack}}</div>
+                            </div>  
+                        </li>                                               
+                    </ul>                    
+                </section>
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-shrink-1 property-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">
+                        Property Assigned Meters
+                        <span class="badge badge-secondary ">{{weights.length}}</span>
+                    </h6>
+                    {{#if weights.length}}
+                        <ul class="list-group list-group-light mb-2 overflow-auto">
+                            {{#each weights}}
+                                <li class="list-group-item d-flex flex-row justify-content-between align-items-center">
+                                    <div class="ms-1 me-1 d-flex align-items-center h-100">
+                                        <iconify-icon icon="{{icon_type}}" class ="fs-1"></iconify-icon>
+                                    </div>
+                                    <div class="d-flex flex-column flex-grow-1">
+                                        <div class="flex-shrink-1 fs-1 ms-1 me-1">
+                                            <div class="d-flex flex-row me-1 mb-1 ">
+                                                <div class="badge badge-secondary badge-property-header-meter rounded-0">
+                                                    Meter:
+                                                </div>   
+                                                <div 
+                                                    class="badge badge-primary flex-grow-1 fw-normal text-nowrap text truncate badge-property-meter rounded-0"
+                                                    title="{{meter_uri}}"
+                                                >
+                                                    {{meter_uri}}
+                                                </div>   
+                                            </div>                                            
+                                        </div>
+                                        <div class="d-flex flex-row justify-content-between align-items-center ms-1 me-2">
+                                            <div class="d-flex flex-row me-1">
+                                                <div class="badge badge-secondary rounded-0">Type:</div>   
+                                                <div 
+                                                    class="badge badge-info fw-normal text-nowrap text-truncate rounded-0"
+                                                    title="{{type}}"
+                                                >
+                                                    {{type}}
+                                                </div>   
+                                            </div>
+                                            <div class="d-flex flex-row">
+                                                <div class="badge badge-secondary rounded-0">Weight:</div>   
+                                                <div class="badge badge-info rounded-0">{{weight}}</div>   
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{else}}
+                        <ul class="list-group list-group-light mb-2 overflow-auto">
+                             <li class="list-group-item d-flex flex-row justify-content-stretch">
+                                <div class="note note-danger flex-grow-1 p-1">
+                                    <p class="mb-0">
+                                       Property does not have assigned meters
+                                    </p>
+                                </div>
+                             </li>
+                        </ul>
+                    {{/if}}                
+                </section>
+                <div class="vr vr-blurry align-self-stretch"></div>
+                <section class="d-flex flex-column flex-grow-1 property-section">
+                    <h6 class="bg-light p-2 border-top border-bottom text-center">
+                        Property Meter Charts
+                    </h6>
+                    <ul class="list-group list-group-light mb-2 h-100">
+                        <li class="list-group-item d-flex flex-row justify-content-stretch">
+                            <div class="note note-secondary flex-grow-1 p-1">
+                                <p class="mb-0 text-center">
+                                    Property Data in the Data Warehouse, last 72 hours
+                                </p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex flex-row justify-content-stretch h-100">
+                             <div 
+                                class="property_charts flex-grow-1 align-self-stretch"
+                                id="chart_{{idx}}" 
+                            >
+                            </div>
+                        </li>
+                    </ul>                    
+                </section>
+            </div>
+        </div>  
+    </div>
+{{/inline}}
+
+
+{{#each participants}}
+    <div class="card border border-secondary shadow-0 rounded-0 mb-1">
+        <div class="card-header text-white bg-primary pt-0 pb-0 rounded-0">
+            <div class="d-flex flex-row justify-content-between">
+                <div class="d-flex flex-row justify-content-start align-items-center">
+                    <div class="ps-1 pe-1 jbb-participant-name-conteiner">
+                        <h1 class="m-0">
+                            <strong>{{name}}</strong> 
+                        </h1>
+                    </div>   
+                    {{> Divider}}
+                    <div class="ps-1 pe-1">
+                        <span class="badge rounded-pill badge-{{#if admin}}success{{else}}secondary{{/if}}">
+                            {{#if admin}} Admin {{else}} Operator {{/if}}
+                        </span>
+                    </div>
+                    {{> Divider}}
+                    <div class="ps-1 pe-1">
+                        <a
+                            class="btn btn-tag btn-rounded btn-outline-secondary text-white"
+                            href="https://console.cloud.google.com/storage/browser/{{bucket}};tab=objects?forceOnBucketsSortingFiltering=false&project={{env}}&prefix=&forceOnObjectsSortingFiltering=false"
+                            target="_blank"
+                            data-mdb-toggle="tooltip" 
+                            data-mdb-placement="right"
+                            title="Participant's Google Storage Bucket"
+                        >
+                            <i class="fa-sharp fa-solid fa-hard-drive"></i>
+                            {{bucket}}
+                        </a>
+                    </div>                                        
+                </div>
+
+                <div class="d-flex flex-row justify-content-start align-items-center">
+                    <div class="ps-1 pe-1"> {{> ParticipantDashboardMenu}} </div>    
+                    <div class="ps-1 pe-5"> {{> AccessCodesMenu}} </div>
+                    {{> CardToggler color="white"}}
+                </div>
+            </div>        
+        </div>
+        <div class="card-body collapse show" id="collapse_{{idx}}">
+            <div class="accordion" id="participant_accordion_{{idx}}">
+                <div class="accordion-item participan-meters-accordion-item">
+                    <h2 class="accordion-header" id="flush-heading-meters-{{idx}}">
+                        <button 
+                            class="accordion-button p-2" 
+                            type="button" 
+                            data-mdb-toggle="collapse"
+                            data-mdb-target="#flush-collapse-meters-{{idx}}" 
+                            aria-expanded="true" 
+                            aria-controls="flush-collapse-meters-{{idx}}"
+                        >
+                            <i class="fs-2 bi bi-speedometer me-2 opacity-70"></i>
+                            Participant Meters Data
+                        </button>
+                    </h2>
+                    <div 
+                        id="flush-collapse-meters-{{idx}}" 
+                        class="accordion-collapse collapse show" 
+                        aria-labelledby="flush-heading-meters-{{idx}}" 
+                    >
+                        <div class="accordion-body overflow-auto">
+                            {{#each meters}}
+                                {{> MeterCard}}
+                            {{/each}}
+                        </div>
+                    </div>
+                </div>
+                {{#if pushes.length}}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="flush-meters-uploads-heading-{{idx}}">
+                            <button 
+                                class="accordion-button p-2" 
+                                type="button" 
+                                data-mdb-toggle="collapse"
+                                data-mdb-target="#flush-collapse-meters-uploads-{{idx}}" 
+                                aria-expanded="true" 
+                                aria-controls="flush-collapse-meters-uploads-{{idx}}"
+                            >
+                                <i class="fs-2 fas fa-upload me-2 opacity-70"></i>
+                                Meters Manual Data Uploads
+                            </button>
+                        </h2>
+                        <div 
+                            id="flush-collapse-meters-uploads-{{idx}}" 
+                            class="accordion-collapse collapse" 
+                            aria-labelledby="flush-meters-uploads-heading-{{idx}}" 
+                            {{!-- data-mdb-parent="#participant_accordion_{{idx}}" --}}
+                        >
+                            <div class="accordion-body">
+                                {{#each pushes}}
+                                    {{> PushesCard}}
+                                {{/each}}                                
+                            </div>
+                        </div>
+                    </div>
+
+                {{/if}}
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="flush-properties-heading-{{idx}}">
+                        <button 
+                            class="accordion-button p-2" 
+                            type="button" 
+                            data-mdb-toggle="collapse"
+                            data-mdb-target="#flush-collapse-properties-heading-{{idx}}" 
+                            aria-expanded="true" 
+                            aria-controls="flush-collapse-properties-{{idx}}"
+                        >
+                            <i class="fs-2 fas fa-city me-2 opacity-70"></i>
+                            Properties
+                        </button>
+                    </h2>     
+                        <div 
+                            id="flush-collapse-properties-heading-{{idx}}" 
+                            class="accordion-collapse collapse" 
+                            aria-labelledby="flush-properties-heading-{{idx}}" 
+                            {{!-- data-mdb-parent="#participant_accordion_{{idx}}" --}}
+                        >
+                            <div class="accordion-body">
+                                {{#if properties.length}}
+                                    {{#each properties}}
+                                        {{> PropertiesCard}}
+                                    {{/each}}
+                                {{/if}}
+                            </div>
+                        </div>                                   
+                </div>                
+            </div>
+
+
+
+{{!-- {{#each pushes}} --}}
+
+
+
+        
+        </div>
+    </div>
+{{/each}}
+
+{{!-- {{#each participants}}
+    <div class="card">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between header">
+                <div>
+                    ------<h5 class="card-title">{{name}}&nbsp;</h5>
+                    ------<p class="message">Bucket {{bucket}}, your role is {{#if admin}} Admin {{else}} Operator {{/if}}</p>
+                    ------<p class="{{status}}">Participant configuration XML file parsed with status: {{#each validation}} {{.}}; {{/each}}</p>
+                </div>
+                <div>
+                    ------<i class="fa-solid fa-chevron-up"></i>
+                    ------<i class="fa-solid fa-chevron-down hidden"></i>
+                </div>
+            </div>
+
+            <div class="toggle-data">
+                -------------------------------------------------------------------------------------------------------
+                <div class="d-flex justify-content-between align-items-start status-data-header">
+                    <h6>Access codes obtained from metered data providers</h6>
+                    <div>
+                        {{> downloadPartial prefix='get_participant_' text='Download Participant XML Config' fileName='config/participant.xml'}}
+                    </div>
+                </div>
+                {{#if codes.length}}
+                    <div class="table-wrapper">
+                        <table class="table table-hover table-bordered access-codes-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Code Description</th>
+                                    <th>Code Content</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {{#each codes}}
+                                    <tr>
+                                        <td>{{name}}</td>
+                                        <td>{{content}}</td>
+                                    </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+                {{else}}
+                    <p>No registered codes</p>
+                {{/if}}
+                -------------------------------------------------------------------------------------------------------                
+
+                <div class="d-flex justify-content-between align-items-start">
+                    <h6>Status of data collection by each meter configured by the participant</h6>
+                </div>
+                <div class="table-wrapper">
+                    <table class="table table-bordered status-data-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th></th>
+                                <th>Meter URI</th>
+                                <th>Type</th>
+                                <th>Exp. updates</th>
+                                <th>Last update</th>
+                                <th>Latest Data File</th>
+                                <th>Haystack</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {{#each meters}}
+                                <tr class="bordered align-middle">
+                                    <td>
+                                        <iconify-icon icon="{{icon_type}}" class ="fs-3"></iconify-icon>
+                                    </td>
+                                    <td>{{ short_uri }}</td>
+                                    <td>{{type}}</td>
+                                    <td>{{updateFrequency}}</td>
+                                    <td class="column-{{status}}">
+                                        {{#if lastUpdateHoursHumanized}}
+                                            <span data-bs-toggle="tooltip" title="{{#each validation}}{{.}};{{/each}}">{{lastUpdateHoursHumanized}} ago</span>
+                                        {{else}}
+                                            <span data-bs-toggle="tooltip" title="{{#each validation}}{{.}};{{/each}}">unknown</span>
+                                        {{/if}}
+                                    </td>
+                                    <td>
+                                        <ul class="list-group">
+                                            {{#each stdFiles}}
+                                                <li class="list-group-item">{{.}}</li>
+                                            {{/each}}
+                                        </ul>
+                                    </td>
+                                    <td>{{haystack}}</td>
+                                    <td style="text-align: right;">
+                                        <div>
+                                            {{> downloadPartial prefix='get_meter_' text='Download Meter XML Config'}}
+                                        </div>
+                                        <div>
+                                            {{#if ../admin}}
+                                                {{> uploadPartial prefix='put_meter_' text='Update Meter XML Config'}}
+                                            {{/if}}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start">
+                    <h6>Upload data for meters configured for manual data upload</h6>
+                </div>
+                <div class="table-wrapper">
+                    <table class="table table-hover table-bordered upload-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Meters URI</th>
+                                <th>Time in</th>
+                                <th></th>
+                                <th>Past uploads</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each pushes}}
+                                <tr>
+                                    <td>{{{meterURIs}}}</td>
+                                    <td>{{timezone}}</td>
+                                    <td>
+                                        <p><b>{{description}}</b></p>
+                                        {{> uploadPartial prefix='put_data_' text='Add Metered Data'}}
+                                        <p class="message">One or more files can be selected, to appear named like this: raw-data-0-{{@root.now}} ...</p>
+                                    </td>
+                                    <td>
+                                        <ul class="list-group">
+                                            {{#each uploads}}
+                                                <li class="list-group-item">{{.}}</li>
+                                            {{/each}}
+                                        </ul>
+                                    </td>
+                                </tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6>Properties</h6>
+                        <p class="{{status}}">{{#each validation}}{{.}};{{/each}}</p>
+                    </div>
+                </div>
+                {{#each properties}}
+                    <div class="d-flex justify-content-between align-items-start sub-header">
+                        <div>
+                            <h6>{{name}}</h6>
+                            <p>{{grossFloorArea}} sq.ft., {{address}}, URI: {{uri}}, Haystack tags: {{haystack}}</p>
+                            <p class="{{status}}">{{#each validation}}{{.}};{{/each}}</p>
+                        </div>
+                        <div class="d-flex justify-content-end align-items-start">
+                            <div class="pe-3">
+                                {{> downloadPartial prefix='get_property_' text='Download Property XML Config'}}
+                            </div>
+                            <div>
+                                {{> linkNewPage}}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <p><b>Meters configured for this property:</b></p>
+                            <div class="table-wrapper">
+                                <table class="table table-hover table-bordered meters-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th></th>
+                                            <th>Type</th>
+                                            <th>Meter URI</th>
+                                            <th>Weight</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {{#each weights}}
+                                            <tr class="align-middle" >
+                                                <td>
+                                                    <iconify-icon icon="{{icon_type}}" class ="fs-3"></iconify-icon>
+                                                </td>
+                                                <td>{{type}}</td>
+                                                <td>{{meter_uri}}</td>
+                                                <td>{{weight}}</td>
+                                            </tr>
+                                            <tr class="{{status}}"><td colspan="4">{{#each validation}}{{.}};{{/each}}</td></tr>
+                                        {{/each}}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div id="chart_{{idx}}" class="property_charts"></div>
+                        </div>
+                    </div>
+                {{/each}}
+
+                <div class="d-flex justify-content-between align-items-start">
+                    <h6>Administration</h6>
+                </div>
+                <p>
+                    <a href="https://admin.google.com/ac/users?journey=1">Add User</a> to this participant, then add her to group
+                    'participant{{number}}_operator' and grant Admin role 'Groups Reader'
+                </p>
+            </div>
+
+        </div>
+    </div>
+{{/each}} --}}

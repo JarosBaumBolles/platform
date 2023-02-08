@@ -1,0 +1,30 @@
+.jbb-page-loader{
+    font-size: 10pt;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.jbb-page-loader .loader-start{
+    padding-right: 0.5rem;
+    color: #1A4589;
+}
+
+.jbb-page-loader .loader-end{
+    padding-left: 0.5rem;
+    color: #BB972E;
+}  
+
+@media (min-width:992px) {
+    .jbb-page-loader{
+        font-size: 60pt;
+        font-weight: bold;
+    }    
+
+    .jbb-page-loader .loader-start{
+        padding-right: 1rem;
+    }
+
+    .jbb-page-loader .loader-end{
+        padding-left: 1rem;
+    }    
+}

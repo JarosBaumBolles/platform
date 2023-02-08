@@ -1,0 +1,332 @@
+@font-face {
+    font-family: "Tahoma";
+    src: url("./fonts/tahoma/tahoma.ttf") format("ttf"),
+    url("./fonts/tahoma/tahomabd.ttf") format("ttf");
+}
+
+body, html {
+	font-family: 'Tahoma', sans-serif;
+	font-size: 16px;
+}
+
+
+/* Should be updated for response design */
+main .row > .position-relative > .position-absolute{
+    padding-left: 12px;
+    /* padding-right: 12px; */
+}
+
+
+
+
+
+/* body {
+	font-family: 'Roboto', sans-serif;
+	font-size: 14px;
+} */
+
+/*-------------------- Dasboard --------------------------------------------*/
+/* .dashboard-container{
+    width: calc(100vw - 10px);
+    height: calc(100vh - 55px - 52px);  /* responsive height */	
+/* } */
+
+/* .container-datastudio{ *
+    height: calc(100vh - 165px);  
+} */
+
+
+/*--------------------------------------------------------------------------*/
+/* .bg-image{
+    background-image: url(../images/background.png);
+    background-repeat: no-repeat;
+    background-position: top;
+    background-size: contain;
+}
+
+.bg-image-opacity-70{
+    background-image: url(../images/background_opacity_70.png);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+.download-button {
+  background-color: #1A4589;
+  border: thin solid #1A4589;
+  color: #B9952A;
+  padding: 20px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-family: 'Roboto', sans-serif;
+  font-size: 18px;
+  font-weight:bold;
+  cursor: pointer;
+  border-radius: 6px;
+  margin:auto;
+} */
+/* ========================================================================= */
+
+/* .header > nav.navbar ul.navbar-nav > li.active > a.nav-link,
+header > nav.navbar ul.navbar-nav > li.active > a.nav-link {
+    border-bottom: 2px solid #b3921b;	
+}
+
+.header > nav.navbar ul.navbar-nav,
+header > nav.navbar ul.navbar-nav {
+    height: 100%;
+}
+
+.header > nav.navbar  ul.navbar-nav > li > a.nav-link,
+header > nav.navbar  ul.navbar-nav > li > a.nav-link {
+    font-family: 'Roboto', sans-serif;
+    font-size: 15px;
+    color: #b3921b;
+    height: 100%;
+}
+
+.header > nav.navbar div.navbar-collapse,
+header > nav.navbar div.navbar-collapse{
+	height: 50px;
+}
+
+.header > nav.navbar,
+header > nav.navbar {
+	padding-top: 0px;
+	padding-bottom: 0px;
+}
+
+.header > nav.navbar,
+header > nav.navbar  {
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+} */
+/* ========================================================================= */  
+  /* svg #plug,
+  svg #socket {
+	fill:#b3921b;
+  }
+  
+  svg #loop-normal {
+	fill: none;
+	stroke: #b3921b;
+	stroke-width: 12;
+  }
+  
+  svg #loop-offset {
+	display: none;
+  }
+  
+  .credit {
+	position: absolute;
+	bottom: 50px;
+	width: 100%;
+	text-align: center;
+  }
+  
+  .credit a {
+	color: #b3921b;
+	font: 800 75% "Open Sans", sans-serif;
+	text-transform: uppercase;
+	text-decoration: none;
+  } */
+/*-------------------------------------------------------------*/
+
+
+
+/* .jbb-note {
+    --jbb-note-padding: 10px;
+    --jbb-note-border-width: 6px;
+    --jbb-note-border-radius: 5px;
+    --jbb-note-strong-font-weight: 600;
+    padding: var(--jbb-note-padding);
+    border-left: var(--jbb-note-border-width) solid;
+    border-radius: var(--jbbb-note-border-radius);
+}
+
+.jbb-note-primary {
+    background-color: #dfe7f6;
+    border-color: #376fc8;
+} */
+
+
+/* .success {
+	display:none;
+}
+
+.warning {
+  	border-top: none;
+	display:table-row;
+	color: #cc9a06;
+	font-size: 12px;
+}
+.column-warning {
+	color: #cc9a06;
+}
+.warning td {
+	font-size: 12px;
+}
+.error {
+  	border-top: none;
+	display:table-row;
+	color: #dc3545;
+	font-size: 12px;
+}
+column-error {
+	color: #dc3545;
+}
+.error td {
+	font-size: 12px;
+}
+
+h1 {
+	font-size: 20px;
+}
+
+h2 {
+	font-size: 18px;
+	margin: 15px 0 5px 0;
+}
+
+h3 {
+	font-size: 16px;
+	margin: 15px 0 5px 0;
+}
+
+p {
+	margin: 1px 0 1px 0;
+	font-size: 14px;
+}
+
+.property_charts {
+	max-height: 600px;
+    height: 100%;
+}
+
+.bordered {
+	border-top: dotted thin #adb5bd;
+	border-bottom: dotted thin #adb5bd;
+}
+
+
+img.icon-img {
+	max-width: 25px;
+	max-height: 25px;
+}
+
+.list-group{
+    max-height: 150px;
+    margin-bottom: 10px;
+	width:200px !important;
+    overflow:scroll;
+	overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+} */
+
+/* spinner */
+/* #loading {
+    margin-top: 80px;
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #084298;
+    animation: spin 1s ease-in-out infinite;
+    -webkit-animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { -webkit-transform: rotate(360deg); }
+}
+@-webkit-keyframes spin {
+    to { -webkit-transform: rotate(360deg); }
+} */
+
+/* content */
+/* .hidden {
+    display: none;
+}
+.card {
+	margin-top: 20px;
+}
+.card h5 {
+    font-size: 20px;
+    margin: 0;
+    font-weight: bold;
+}
+.card h6 {
+    font-size: 18px;
+    margin: 0;
+}
+.card .card-title {
+    margin: 0;
+}
+.card .fa-solid {
+	cursor: pointer;
+}
+.card .toggle-data {
+    margin-top: 15px;
+}
+.card .link-button {
+    color: #084298;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+}
+.card .link-button:hover {
+    text-decoration: underline;
+}
+.access-codes-table th,
+.access-codes-table td {
+	width: 50%;
+}
+.status-data-table th:nth-child(1),
+.status-data-table td:nth-child(1) {
+	width: 51px;
+}
+.status-data-table th:nth-child(3),
+.status-data-table td:nth-child(3),
+.status-data-table th:nth-child(4),
+.status-data-table td:nth-child(4),
+.status-data-table th:nth-child(5),
+.status-data-table td:nth-child(5) {
+	width: 120px;
+}
+.status-data-table th:nth-child(6),
+.status-data-table td:nth-child(6),
+.status-data-table th:nth-child(7),
+.status-data-table td:nth-child(7) {
+	width: 220px;
+}
+.status-data-table th:nth-child(8),
+.status-data-table td:nth-child(8) {
+	width: 200px;
+}
+.upload-table th:nth-child(2),
+.upload-table td:nth-child(2) {
+	width: 100px;
+}
+.upload-table th:nth-child(3),
+.upload-table td:nth-child(3) {
+	width: 650px;
+}
+.upload-table th:nth-child(4),
+.upload-table td:nth-child(4) {
+	width: 220px;
+}
+.meters-table th:nth-child(1),
+.meters-table td:nth-child(1) {
+	width: 51px;
+}
+.meters-table th:nth-child(2),
+.meters-table td:nth-child(2),
+.meters-table th:nth-child(4),
+.meters-table td:nth-child(4) {
+	width: 30%;
+}
+.table-wrapper {
+	margin-top: 10px;
+	max-height: 600px;
+	overflow: auto;
+} */

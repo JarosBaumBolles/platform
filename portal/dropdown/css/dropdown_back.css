@@ -1,0 +1,161 @@
+@font-face {
+    font-family: "Tahoma";
+    src: url("./fonts/tahoma/tahoma.ttf") format("ttf"),
+    url("./fonts/tahoma/tahomabd.ttf") format("ttf");
+}
+
+body, html {
+	font-family: 'Tahoma', sans-serif;
+	font-size: 16px;
+}
+
+
+/* Should be styled as btn tag */
+/* .nav.navbar-nav > li > a {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+
+    border-radius: 0.25rem;
+} */
+
+.navbar-outline {
+    --navbar-border-widht: 0.125rem;
+    border-style: solid;
+    border-width: var(--navbar-border-widht);
+}
+
+.navbar.navbar-rounded .nav.navbar-nav .nav-item > a{
+    --navbar-rounded-border-radius: 0.8rem;
+    border-radius: var(--navbar-rounded-border-radius);
+}
+
+.navbar .nav.navbar-nav .nav-item > a {
+    --mdb-btn-padding-top: 0.5rem;
+    --mdb-btn-padding-bottom: 0.375rem;
+    --mdb-btn-padding-start: 0.5rem;
+    --mdb-btn-padding-end: 0.5rem;    
+    --mdb-btn-border-width: 0;
+    --mdb-btn-border-color: none;
+    --mdb-btn-border-radius: 0.25rem;
+    --mdb-btn-box-shadow: 0 4px 9px -4px rgba(0,0,0,0.35);
+    --mdb-btn-hover-box-shadow: 0 8px 9px -4px rgba(0,0,0,0.15),0 4px 18px 0 rgba(0,0,0,0.1);
+    --mdb-btn-focus-box-shadow: 0 8px 9px -4px rgba(0,0,0,0.15),0 4px 18px 0 rgba(0,0,0,0.1);
+    --mdb-btn-active-box-shadow: 0 8px 9px -4px rgba(0,0,0,0.15),0 4px 18px 0 rgba(0,0,0,0.1);
+    padding-top: var(--mdb-btn-padding-top);
+    padding-bottom: var(--mdb-btn-padding-bottom);
+    padding-left: var(--mdb-btn-padding-start);
+    padding-right: var(--mdb-btn-padding-end);
+    text-transform: capitalize;
+    border: 0;
+    border-radius: var(--mdb-btn-border-radius);
+    box-shadow: var(--mdb-btn-box-shadow);    
+}
+
+.navbar.navbar-light.navbar-outline .nav.navbar-nav .nav-item > a{
+    --navbar-item-bg: transparent;
+    --navbar-item-color: #fbfbfb;
+    --navbar-item-hover-bg: transparent;
+    --navbar-item-hover-color: #eee;
+    --navbar-item-focus-bg: transparent;
+    --navbar-item-focus-color: #eee;
+    --navbar-item-active-bg: transparent;
+    --navbar-item-active-color: #e2e2e2;
+    --navbar-item-border-color: #e2e2e2;
+    --navbar-item-show-color: #3f5983;
+    border-color: var(--navbar-item-border-color);
+    color: var(--navbar-item-color);
+    border-style: solid;
+    border-width: var(--navbar-border-widht);    
+}
+
+.navbar.navbar-light.navbar-outline .nav.navbar-nav .nav-item.dropdown .dropdown-toggle.show{
+    background-color: var(--navbar-item-show-color);
+    border-color: var(--navbar-item-border-color);
+}
+
+/* Main Menu */
+.navbar .navbar-nav > .nav-item.dropdown .dropdown-menu,
+.navbar.navbar-light .navbar-nav > .nav-item.dropdown .dropdown-menu
+{
+    border-top: 3px solid #0d0d0d;
+    border-bottom: 5px solid #0d0d0d;
+    -webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+/* Highlight item in main menu */ 
+/* .navbar .navbar-nav > .nav-item  > a:hover,
+.navbar .navbar-nav > .nav-item  > a:focus,
+.navbar.nav-primary  .navbar-nav > .nav-item > a:hover,
+.navbar.nav-primary  .navbar-nav > .nav-item > a:focus {
+    color: #e6e6e6;
+    background-color: #82b541;
+} */
+
+/* dropdon menu general style */
+.navbar-nav > .nav-item.dropdown .dropdown-menu li {
+    /* position: relative; */
+    font-size: 1rem;
+    font-weight: 300;
+    padding: 0.5rem;
+    text-transform: uppercase;
+}
+
+
+.navbar.navbar-light .navbar-nav > .nav-item.dropdown .dropdown-menu li > a {
+    color: #777;
+    border-bottom: 1px solid #f3f3f3;
+}
+
+/* Main Menu */
+
+/* Submenu */
+
+/* .dropdown-submenu .dropdown-menu{
+    position: absolute;
+    display: none;
+} */
+
+.navbar .navbar-nav.navbar-left .nav-item.dropdown > .dropdown-menu li.dropdown-submenu > .dropdown-menu {
+    left: 100%;
+    margin-left: -1px;
+}
+
+
+.navbar .navbar-nav.navbar-right .nav-item.dropdown > .dropdown-menu li.dropdown-submenu > .dropdown-menu {
+    left: -100%;
+    margin-right: -1px;
+}
+
+.navbar .navbar-nav .nav-item.dropdown li.dropdown-submenu:hover > .dropdown-menu {
+    display: block;
+    top: 0px;
+    opacity: 1;
+
+}
+/* Submenu */
+
+
+/* Menu items aligment */
+
+.navbar .navbar-nav .dropdown-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+} 
+
+.navbar .navbar-nav.navbar-right .dropdown-menu .dropdown-item {
+    flex-direction: row-reverse;
+} 
+/* Menu items aligment */
+
+
+
+
+/*===========================================================================*/

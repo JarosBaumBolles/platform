@@ -1,0 +1,13 @@
+steps:
+  - name: 'python:3.9-slim-bullseye'
+    args:
+      - '-c'
+      - |
+        python -m venv venv
+        . venv/bin/activate
+
+        python -m pip install -r requirements.txt
+        python -m pip install -r requirements-dev.txt
+
+        python deploy_ctl.py --analysis
+    entrypoint: /bin/sh

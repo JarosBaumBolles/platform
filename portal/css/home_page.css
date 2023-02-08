@@ -1,0 +1,204 @@
+@font-face {
+    font-family: "Tahoma";
+    src: url("./fonts/tahoma/tahoma.ttf") format("ttf"),
+    url("./fonts/tahoma/tahomabd.ttf") format("ttf");
+}
+
+body {
+	font-family: 'Tahoma', sans-serif;
+	font-size: 16px;
+}
+
+@media (min-width:992px) {
+    .navbar.navbar-jbb .container-fluid{
+        margin-left: 10rem!important;
+    }
+}
+
+.fh-logo-img {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    height: 220px;
+    width: 140px;
+    z-index: 10000;
+}
+
+.download-button {
+  background-color: #1A4589;
+  border: thin solid #1A4589;
+  color: #B9952A;
+  padding: 20px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-family: 'Roboto', sans-serif;
+  font-size: 18px;
+  font-weight:bold;
+  cursor: pointer;
+  border-radius: 6px;
+  margin:auto;
+}
+
+.fcsht-image{
+    width: 333px;
+}
+
+.fcsht-btn-outline {
+    color: #002F86!important;     
+    border-color: #002F86!important;   
+    font-weight: bold;
+    font-size: 20px;
+    border-radius: 0;
+    text-transform: uppercase;
+}
+
+.fcsht-btn-outline:hover {
+    --bs-bg-opacity: 1;
+    color: #BC983D!important;
+    background-color: #002F86!important;   ;
+    border-color: #002F86!important;   ;
+}
+.btn-check:focus + .fcsht-btn-outline, .fcsht-btn-outline:focus {
+    box-shadow: 0 0 0 0.25rem #2d6be6bd;
+}
+
+.fcsht-btn-outline:disabled, .fcsht-btn-outline.disabled {
+    color: #0d6efd;
+    background-color: transparent;
+}
+
+.fcsht-btn-label{
+    font-weight: bold;
+    font-size: 30px;
+    color: #BC983D!important;;
+}
+
+.vs-video-card{
+    border: none;
+    background-color: transparent!important;
+}
+
+.vs-video-container{
+    height: 332px!important;
+    width: 590px!important;
+    /* background-color: #a4b3ce;     */
+}
+
+
+.vs-test-height{
+    height: 200px!important;
+}
+
+/* ========================================================================= */
+
+
+/* James' changes START */
+p.thumbnail {
+    font-size: 26px;
+}
+
+a.thumbnail {
+    width: auto;
+    margin-right: 30px;
+    margin-bottom: 30px;
+}
+
+div.thumbnail {
+    display:flex;
+    justify-content: center; 
+    align-items: center;
+}
+
+/* James' changes END */
+
+
+/* container wrapper */
+.container-wrapper {
+    margin: 55px 90px 0 90px;
+}
+
+/* layout specific */
+.sub-header div.text-jbb-blue {
+    font-size: 20px;
+    line-height: 26px;
+}
+
+#fact-sheet {
+    padding: 0 0 45px 0;
+    margin-right: 0;
+}
+
+.title {
+    font-size: 30px;
+}
+
+.trade-title {
+    font-size: 58px;
+}
+
+/* 3x3 */
+#flex-grid-wrapper {
+    margin-top: 40px;
+    margin-bottom: 165px;
+}
+
+#flex-grid {
+    margin: 0 auto;
+    display: grid;
+    gap: 90px;
+}
+
+@media (min-width: 1024px) {
+  #flex-grid {
+      grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1600px) {
+  #flex-grid {
+      grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+#flex-grid .flex-grid-item {
+    background: transparent;
+    color: #002F86;
+    border: 2px solid #002F86;
+    background-size: 100%;
+}
+
+#flex-grid .flex-grid-item:hover {
+    color: #BC983D;
+    background-image: none !important;
+    background-color: #002F86 !important;
+}
+
+#flex-grid .flex-grid-item .flex-grid-item-container {
+    width: 100%;
+    padding-bottom: 57%;
+    position: relative;
+    background-color: rgba(255, 255, 255, .5);
+}
+
+#flex-grid .flex-grid-item:hover .flex-grid-item-container {
+    background-color: #002F86 !important;
+}
+
+#flex-grid .flex-grid-item .flex-grid-item-container .content {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 2em;
+    font-weight: bold;
+}
+
+#flex-grid .flex-grid-item .flex-grid-item-container iframe {
+    border: none;
+    width: 100%;
+    height: 100%;
+}
