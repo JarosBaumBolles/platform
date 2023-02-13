@@ -49,6 +49,7 @@ class WillowCfg:  # pylint:disable=too-many-instance-attributes
     point_id: str = ""
     gap_regeneration_window: int = -1
 
+
 @dataclass
 class FetchPayload:
     """Fetch request hour data"""
