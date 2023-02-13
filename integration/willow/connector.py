@@ -1,40 +1,23 @@
 """Willow Integration"""
 import uuid
-from dataclasses import asdict, dataclass, field, replace
-from json import dumps, load, loads, JSONDecodeError
+from collections import Counter
+from json import JSONDecodeError, dumps, load
 from pathlib import Path
+from queue import Queue
 from typing import Optional
-
-from googleapiclient.errors import HttpError
-from pendulum import DateTime
-
+from dataclass_factory import Factory
+from expiringdict import ExpiringDict
 from common import settings as CFG
-from common.bucket_helpers import file_exists, get_missed_standardized_files
-from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.request_helpers import HTTPRequestMethod, PayloadType, retry
-from integration.base_integration import (
-    BasePullConnector,
-    GeneralInfo,
-    MeterConfig,
-    Meters,
-    StorageInfo,
-)
-
-from dataclass_factory import Factory
+from integration.base_integration import BasePullConnector
 from integration.willow.config import WillowCfg
-from google.cloud.storage import Client
-from expiringdict import ExpiringDict
-from integration.willow.workers import (
-    GapsDetectionWorker, 
-    FetchWorker, 
-    StandrdizeWorker
-)
-from queue import Queue
 from integration.willow.exceptions import MalformedConfig
-from collections import Counter
+from integration.willow.workers import (
+    FetchWorker,
+    GapsDetectionWorker,
+    StandrdizeWorker,
+)
 
 
 class WillowConnector(BasePullConnector):
@@ -42,18 +25,14 @@ class WillowConnector(BasePullConnector):
 
     __created_by__ = "Willow Connector"
     __description__ = "Willow Integration"
-    __name__ = "Willow Connector"       
+    __name__ = "Willow Connector"
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )        
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
         self._config: Optional[WillowCfg] = None
-        self._gaps_worker: Optional[GapsDetectionWorker] = None      
-
+        self._gaps_worker: Optional[GapsDetectionWorker] = None
 
         # TODO: SHOULD be moved to the BasePullConnector and propagated to
         # the other pull integrations
@@ -65,7 +44,7 @@ class WillowConnector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None        
+        self._standardize_worker: Optional[StandrdizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
@@ -80,12 +59,11 @@ class WillowConnector(BasePullConnector):
                 raise MalformedConfig from err
 
             self._gaps_worker = GapsDetectionWorker(
-                missed_hours_cache=self._missed_hours,
-                config=self._config
+                missed_hours_cache=self._missed_hours, config=self._config
             )
 
             self._fetch_worker = FetchWorker(
-                missed_hours = self._missed_hours, 
+                missed_hours=self._missed_hours,
                 fetched_files=self._fetched_files_q,
                 fetch_update=self._fetch_update_q,
                 config=self._config,
@@ -96,7 +74,7 @@ class WillowConnector(BasePullConnector):
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,
                 config=self._config,
-            ) 
+            )
         self._logger.debug(
             "Loaded configuration.",
             extra={
@@ -105,8 +83,8 @@ class WillowConnector(BasePullConnector):
                 }
             },
         )
-            
-    # TODO: @todo After comletion check posibility move to some base class 
+
+    # TODO: @todo After comletion check posibility move to some base class
     def get_missed_hours(self) -> None:
         """Get list of missed hours"""
         # Standardized data stored separately by type meter. It means that it
@@ -117,13 +95,13 @@ class WillowConnector(BasePullConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
             "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
         )
 
-    # TODO: @todo Redesign. Move to base class 
+    # TODO: @todo Redesign. Move to base class
     def fetch(self) -> None:
         with elapsed_timer() as ellapsed:
             self._logger.info("Fetching data.")
@@ -137,12 +115,11 @@ class WillowConnector(BasePullConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
+            self._logger.error("The 'configure' method must be run before. Complete.")
             return None
 
-        self._fetch_worker.run(self._run_time)    
+        self._fetch_worker.run(self._run_time)
+        return None
 
     # TODO: @todo Candidate to be in a base class
     def standardize(self) -> None:
@@ -166,6 +143,7 @@ class WillowConnector(BasePullConnector):
         self.get_missed_hours()
         self.fetch()
         self.standardize()
+
 
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""
