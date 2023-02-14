@@ -1,60 +1,49 @@
 """ Ies Mach Workers module"""
 
-import binascii
-import hashlib
-import hmac
 import time
-import urllib
-import urllib.parse
 import uuid
-from base64 import b64encode
+from abc import abstractmethod
 from collections import Counter
 from http import HTTPStatus
-from json import dumps, loads
+from json import JSONDecodeError, dumps, loads
 from queue import Queue
-from threading import Lock
-from typing import Any, List, Optional, Tuple, Dict
+from typing import Any, Dict, List, Optional
 
 import requests
 from dataclass_factory import Factory, Schema
+from expiringdict import ExpiringDict
+from google.cloud.storage import Client
 from pandas import DataFrame, concat
 from pendulum import DateTime
 
-from common import settings as CFG
+import common.settings as CFG
+from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
 from common.date_utils import format_date, parse, truncate
-from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
-
-from expiringdict import ExpiringDict
-import requests
-from common.thread_pool_executor import run_thread_pool_executor
-from common.bucket_helpers import (
-    file_exists, 
-    get_missed_standardized_files, 
-    require_client
-)
-from google.cloud.storage import Client
 from common.logging import Logger, ThreadPoolExecutorLogger
-import uuid
-import common.settings as CFG
-from math import floor
+from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.irisys.data_structures import DataFile, StandardizedFile
 from integration.irisys.exceptions import (
+    EmptyDataInterruption,
     EmptyResponse,
     LoadFromConnectorAPI,
-    EmptyDataInterruption
 )
+
+RUN_GAPS_PARALLEL = True
+RUN_FETCH_PARALLEL = True
+RUN_STANDARDIZE_PARALLEL = True
 
 
 # TODO: @todo Must be moved to a base class
 class GapsDetectionWorker(BaseFetchWorker):
     """IES Mach get missed hours worker functionality"""
+
     __created_by__ = "IES Mach Missed Hours Worker"
     __description__ = "IES Mach Integration"
     __name__ = "IES Mach Missed Hours Worker"
     __max_idle_run_count__ = 5
-    
-    def __init__(
+
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -63,36 +52,30 @@ class GapsDetectionWorker(BaseFetchWorker):
         self._config = config
         self._meters_queue = Queue()
         self._trace_id: str = uuid.uuid4()
-        self._logger = Logger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
-        self._logger = Logger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
+        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
+        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        ) 
+            description=self.__description__, trace_id=self._trace_id
+        )
 
-    def configure(self) -> None:
+    def configure(self, run_time: DateTime) -> None:
+        self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
         for mtr_cfg in self._config.meters:
-            self._meters_queue.put(mtr_cfg)        
-
+            self._meters_queue.put(mtr_cfg)
 
     def missed_hours_consumer(
         self,
         storage_client: Client,
-        logs: Queue,
-        worker_idx: str
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
+        """Retrieving missed data points."""
         if self._meters_queue.empty():
             self._th_logger.warning("Meters queue is empty.")
-            return None    
-        empty_run_count = 0        
+            return None
+        empty_run_count = 0
         while True:
             if self._meters_queue.empty():
                 if empty_run_count == self.__max_idle_run_count__:
@@ -105,35 +88,39 @@ class GapsDetectionWorker(BaseFetchWorker):
                 bucket_name=mtr_cfg.standardized.bucket,
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
-                client=storage_client
-            )       
+                client=storage_client,
+            )
             if mtr_msd_poll_hrs:
-                for hr in mtr_msd_poll_hrs:
+                for mt_hr in mtr_msd_poll_hrs:
                     try:
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mt_hr].put(mtr_cfg)
                     except KeyError:
-                        self._missed_hours_cache[hr] = Queue()
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mt_hr] = Queue()
+                        self._missed_hours_cache[mt_hr].put(mtr_cfg)
 
                 self._th_logger.info(
                     f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' "
                     "meter.",
-                )            
+                )
             else:
                 self._th_logger.info(
                     f"Meter {mtr_cfg.meter_name} is up to date.",
-                )            
-            self._meters_queue.task_done()        
+                )
+            self._meters_queue.task_done()
 
-
-    def run(self) -> None:
-        self.configure()
+    def run(self, run_time: DateTime) -> None:
+        """Run loop Entrypoint"""
+        self.configure(run_time)
         self._run_consumers(
-            (
-                self.missed_hours_consumer,
-                [require_client()]
-            )
+            (self.missed_hours_consumer, [require_client()]),
+            run_parallel=RUN_GAPS_PARALLEL,
         )
+
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
+
 
 class FetchWorker(BaseFetchWorker):
     """Irisys fetch worker functionality"""
@@ -149,6 +136,7 @@ class FetchWorker(BaseFetchWorker):
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
+    __request_timeout__ = 60
 
     def __init__(
         self,
@@ -171,16 +159,12 @@ class FetchWorker(BaseFetchWorker):
         self._auth_token: Optional[str] = ""
 
         self._factory = Factory(
-            default_schema=Schema(trim_trailing_underscore=False, 
-            skip_internal=False)
+            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
 
     # TODO: @todo MUt be moved in base class/ The same code ia in Willow
     def _load_from_file(
-        self, 
-        filename: str, 
-        storage_client: Client, 
-        logs: Queue
+        self, filename: str, storage_client: Client, logs: Queue
     ) -> Optional[Dict]:
         fl_exists = self._is_file_exists(
             client=storage_client,
@@ -204,10 +188,10 @@ class FetchWorker(BaseFetchWorker):
             path=self._config.extra.raw.path,
             filename=filename,
             logs=logs,
-            client=storage_client
+            client=storage_client,
         )
 
-        if not data:
+        if not data or not data[0].get("intervals", []):
             raise LoadFromConnectorAPI(
                 f"The raw file 'gs://{self._config.extra.raw.bucket}/"
                 f"{self._config.extra.raw.path}/{filename}'"
@@ -218,10 +202,7 @@ class FetchWorker(BaseFetchWorker):
     # TODO: @todo Potential candidate to be in the base class
     # The similar code used in Openweather and Willow api
     def _request_data(
-        self, 
-        url: str, 
-        json_params: dict, 
-        headers: str
+        self, url: str, json_params: dict, headers: str
     ) -> Optional[Dict]:
         result, retry_count, delay = None, 0, 0.5
         data = None
@@ -231,6 +212,7 @@ class FetchWorker(BaseFetchWorker):
                     url,
                     json=json_params,
                     headers=headers,
+                    timeout=self.__request_timeout__,
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
@@ -244,38 +226,36 @@ class FetchWorker(BaseFetchWorker):
                 time.sleep(delay)
             except JSONDecodeError as err:
                 self._th_logger.error(
-                    f"Response does not contain json data due to the reason '{err}'" 
+                    f"Response does not contain json data due to the reason '{err}'"
                 )
-
-        if not result or not data or result.status_code != HTTPStatus.OK.value:
+        check = not result or not data or not data[0].get("intervals", [])
+        if check or result.status_code != HTTPStatus.OK.value:
             raise EmptyResponse(
                 "Cannot run request corectly. "
                 f"Response status code is {result.status_code}. "
                 f"Response message is '{result.text}'. Response parameters: - "
-                f"{params}; "          
+                f"{json_params}; "
             )
-        return data   
+        return data
 
     def fetch_consumer(
-        self, 
-        storage_client: Client,        
-        logs: Queue, 
-        worker_idx: str
-    ) -> None:  
-        if not len(self._missed_hours_queue):
+        self,
+        storage_client: Client,
+        logs: Queue,
+        worker_idx: str,  # pylint:disable=unused-argument
+    ) -> None:
+        """Fetch data worker"""
+        if not bool(len(self._missed_hours_queue)):
             self._th_logger.warning(
                 "Missed hours queue is empty. Maybe data up to date.",
             )
-            return None 
+            return None
 
         empty_run_count = 0
-        possible_errors = (
-            EmptyResponse, 
-            requests.exceptions.JSONDecodeError
-        )
+        possible_errors = (EmptyResponse, requests.exceptions.JSONDecodeError)
 
         while True:
-            if not len(self._missed_hours_queue):
+            if not bool(len(self._missed_hours_queue)):
                 if empty_run_count == self.__max_idle_run_count__:
                     break
                 empty_run_count += 1
@@ -285,9 +265,7 @@ class FetchWorker(BaseFetchWorker):
                 try:
                     try:
                         data = self._load_from_file(
-                            filename=filename, 
-                            storage_client=storage_client, 
-                            logs=logs
+                            filename=filename, storage_client=storage_client, logs=logs
                         )
                         add_to_update = False
                     except LoadFromConnectorAPI as err:
@@ -302,12 +280,9 @@ class FetchWorker(BaseFetchWorker):
                             url=self.__fetch_url__,
                             json_params={
                                 "start": format_date(
-                                    start_date, 
-                                    self.__api_date_format__
+                                    start_date, self.__api_date_format__
                                 ),
-                                "end": format_date(
-                                    end_date, self.__api_date_format__
-                                ),
+                                "end": format_date(end_date, self.__api_date_format__),
                                 "responseTimeZone": self.__time_zone__,
                                 "datapoints": int(self._config.datapoint_id),
                             },
@@ -322,16 +297,16 @@ class FetchWorker(BaseFetchWorker):
                         f"Cannot fetch data for '{mtr_hr}' due to the error '{err}'."
                         " Skipping."
                     )
-                    continue  
+                    continue
 
                 file_info = DataFile(
                     file_name=filename,
                     bucket=self._config.extra.raw.bucket,
                     path=self._config.extra.raw.path,
                     body=dumps(data, indent=4, sort_keys=True),
-                    meters=mtr_cfgs,                    
-                )    
-                file_info.timestamps.put(mtr_hr)            
+                    meters=mtr_cfgs,
+                )
+                file_info.timestamps.put(mtr_hr)
 
                 self._fetched_files_queue.put(file_info)
                 self._shadow_fetched_files_queue.put(file_info)
@@ -339,94 +314,92 @@ class FetchWorker(BaseFetchWorker):
                     self._add_to_update(file_info, self._fetch_update_file_buffer)
 
     def run(self, run_time: DateTime) -> None:
+        """Run loop entry point"""
         self.configure(run_time)
         self._run_consumers(
             [
-                (
-                    self.fetch_consumer, 
-                    [require_client()]
-                ),
-                (self.save_fetched_files_worker, [])
-            ]
+                (self.fetch_consumer, [require_client()]),
+                (self.save_fetched_files_worker, []),
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
-        self._run_consumers([(self.save_fetch_status_worker, []),])
+        self._run_consumers(
+            [
+                (self.save_fetch_status_worker, []),
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
+        )
         self._logger.info("Fetching has been done.")
+
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
+
 
 class StandrdizeWorker(BaseStandardizeWorker):
     """IES Mach Standardization Worker."""
+
     __created_by__ = "IES Mach Connector"
     __description__ = "IES Mach Integration"
     __name__ = "IES Mach Standardize Worker"
 
-    @staticmethod
-    def date_repr(row):
+    def date_repr(self, row):
         """Get date string reprezentation and timestamp"""
         data = parse(row.datetime, tz_info="UTC")
-        data_hr =  truncate(
-            data,
-            level="hour"
-        )
-        row["timestamp"] = int(data.timestamp())
+        meter_data = self._adjust_meter_date(data)
+
+        data_hr = truncate(data, level="hour")
+        meter_data_hr = truncate(meter_data, level="hour")
+        row["timestamp"] = int(meter_data.timestamp())
         row["hour"] = format_date(data_hr, CFG.PROCESSING_DATE_FORMAT)
+        row["MeterHour"] = format_date(meter_data_hr, CFG.PROCESSING_DATE_FORMAT)
         return row
 
     def _get_data_df(self, data: List) -> DataFrame:
-        if not data:
-            raise EmptyDataInterruption(
-                f"Recieved Empty Data"
-            )
+        if not data or not data[0].get("intervals", {}):
+            raise EmptyDataInterruption("Recieved Empty Data")
 
-        dt_fs = list(
-            map(
-                lambda x: DataFrame.from_dict(x.get("intervals", {})), 
-                data
-            )            
-        )
+        dt_fs = list(map(lambda x: DataFrame.from_dict(x.get("intervals", {})), data))
 
         if len(dt_fs) == 1:
             raw_df = dt_fs[0]
         else:
             raw_df = concat(
-                map(
-                    lambda x: DataFrame.from_dict(x.get("intervals", {})), 
-                    data
-                )
+                map(lambda x: DataFrame.from_dict(x.get("intervals", {})), data)
             )
-        if not len(raw_df):
+        if not bool(len(raw_df)):
             raise EmptyDataInterruption(
                 f"Can not load the data '{data}' in a Dataframe"
-            )            
+            )
         raw_df = raw_df.apply(self.date_repr, axis=1)
         raw_df.sort_values(by=["timestamp"], inplace=True, ascending=False)
 
-        return raw_df      
+        return raw_df
 
     def _standardize_occupancy(
-        self, 
-        data_df: DataFrame, 
-        mtr_date: DateTime,
-        mtr_cfg: Dict
+        self, data_df: DataFrame, mtr_date: DateTime, mtr_cfg: Dict
     ) -> Meter:
-        """Standardize electric value"""  
-        if not len(data_df):
+        """Standardize electric value"""
+        if not bool(len(data_df)):
             raise EmptyDataInterruption(
                 f"Recieved Empty Data for the meter point {mtr_date}"
             )
 
         start_date = truncate(mtr_date, level="hour")
-        end_date = start_date.add(minutes=59, seconds=59) 
+        end_date = start_date.add(minutes=59, seconds=59)
 
         mtr_hr = format_date(start_date, CFG.PROCESSING_DATE_FORMAT)
 
         # fiter dataframe to operate only with relatad data
-        mtr_df = data_df[data_df.hour == mtr_hr]
+        mtr_df = data_df[data_df.MeterHour == mtr_hr]
 
         max_timestamp = mtr_df.timestamp.max()
 
         data_row = mtr_df[mtr_df.timestamp == max_timestamp].to_dict("records")
 
-        if not len(data_row):
+        if not bool(len(data_row)):
             raise EmptyDataInterruption(
                 f"Recieved Empty Data for the meter point {mtr_date}"
             )
@@ -434,22 +407,20 @@ class StandrdizeWorker(BaseStandardizeWorker):
         def _getter(xdata: List[Dict[str, Any]]) -> Optional[str]:
             return xdata[0]["value"], start_date, end_date
 
-        return self._standardize_generic(data_row, mtr_cfg, _getter)            
+        return self._standardize_generic(data_row, mtr_cfg, _getter)
 
     def _standardize(self, raw_file_obj: DataFile) -> List[DataFile]:
         """Standardize the given raw file"""
 
         if not raw_file_obj.body:
-            self._th_logger.error(
-                "Recived empty standardize data. Skipping"
-            )
+            self._th_logger.error("Recived empty standardize data. Skipping")
             return []
 
         json_data = loads(raw_file_obj.body)
 
         # TODO: Redesign worker to process all meter points in parallel
-        standardized_files = []    
-        try:        
+        standardized_files = []
+        try:
             raw_data = self._get_data_df(json_data)
         except EmptyDataInterruption as err:
             self._th_logger.error(
@@ -458,7 +429,7 @@ class StandrdizeWorker(BaseStandardizeWorker):
             return []
 
         while not raw_file_obj.timestamps.empty():
-            mtr_hr = raw_file_obj.timestamps.get()          
+            mtr_hr = raw_file_obj.timestamps.get()
             while not raw_file_obj.meters.empty():
                 mtr_cfg = raw_file_obj.meters.get()
                 meter_type = mtr_cfg.type.strip().lower().replace(" ", "_")
@@ -466,7 +437,7 @@ class StandrdizeWorker(BaseStandardizeWorker):
                 stndrdz_func = getattr(self, stndrdz_mthd_nm, "")
                 if not callable(stndrdz_func):
                     #  TODO: Add loging here
-                    continue  
+                    continue
 
                 try:
                     meter = stndrdz_func(
@@ -476,37 +447,39 @@ class StandrdizeWorker(BaseStandardizeWorker):
                     )
                 except EmptyDataInterruption as err:
                     self._th_logger.error(
-                        f"Cannot standardize meter {mtr.cfg.meter_name}"
+                        f"Cannot standardize meter {mtr_cfg.meter_name}"
                         f" point '{mtr_hr}' due to the error '{err}'"
                     )
                     continue
 
                 standardized_files.append(
                     StandardizedFile(
-                        file_name=format_date(
-                            mtr_hr, 
-                            CFG.PROCESSING_DATE_FORMAT
-                        ),
+                        file_name=format_date(mtr_hr, CFG.PROCESSING_DATE_FORMAT),
                         bucket=mtr_cfg.standardized.bucket,
                         path=mtr_cfg.standardized.path,
                         meter=meter,
                         body=meter.as_str(),
-                        cfg=mtr_cfg
+                        cfg=mtr_cfg,
                     )
                 )
                 raw_file_obj.meters.task_done()
             raw_file_obj.timestamps.task_done()
         return standardized_files
 
-    # TODO: @todo Possible candite to be in base class. Or boiler plate code   
+    # TODO: @todo Possible candite to be in base class. Or boiler plate code
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
 
         self._run_consumers(
             [
                 (self.run_standardize_worker, []),
-                (self.save_standardized_files_worker, [])
-            ]
+                (self.save_standardized_files_worker, []),
+            ],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
         self.finalize_standardize_update_status()
-        self._run_consumers([(self.save_standardize_status_worker, [])])  
+        self._run_consumers(
+            [(self.save_standardize_status_worker, [])],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
+        )
