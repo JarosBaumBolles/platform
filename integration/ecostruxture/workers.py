@@ -617,7 +617,7 @@ class StandrdizeWorker(BaseStandardizeWorker):
                     )
                 except EmptyDataInterruption as err:
                     self._th_logger.error(
-                        f"Cannot standardize meter {mtr.cfg.meter_name}"
+                        f"Cannot standardize meter {mtr_cfg.meter_name}"
                         f" point '{mtr_hr}' due to the error '{err}'"
                     )
                     continue

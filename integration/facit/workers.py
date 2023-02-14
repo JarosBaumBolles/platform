@@ -1,4 +1,4 @@
-""" OpenWeather integration module"""
+""" Facit integration module"""
 import base64
 import uuid
 from dataclasses import asdict, dataclass, field, replace
@@ -123,7 +123,6 @@ class FetchWorker(BaseFetchWorker):
             self._fetched_files_queue.put(file_info)
             self._shadow_fetched_files_queue.put(file_info)
             self._add_to_update(file_info, self._fetch_update_file_buffer)                    
-        self._logger.info("")
             
     def run(self, run_time: DateTime) -> None:
         self.configure(run_time)

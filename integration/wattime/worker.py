@@ -152,7 +152,7 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
                 )
             except (requests.ConnectionError, requests.ConnectTimeout):
                 retry_count += 1
-                delay = retry_count * __retry_delay__
+                delay = retry_count * self.__retry_delay__
                 time.sleep(delay)
         return token
 

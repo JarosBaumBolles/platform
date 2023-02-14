@@ -1,36 +1,26 @@
 """Irisys Integration"""
+import base64
 import uuid
-from dataclasses import asdict, dataclass, field, replace
+from collections import Counter
+from json import JSONDecodeError, dumps, load
+from queue import Queue
 from typing import Optional
 
-from pendulum import DateTime
+from dataclass_factory import Factory
+from expiringdict import ExpiringDict
 
 from common import settings as CFG
-from common.bucket_helpers import file_exists, get_missed_standardized_files
-from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.request_helpers import PayloadType
-from integration.base_integration import (
-    BasePullConnector,
-    GeneralInfo,
-    MeterConfig,
-    Meters,
-    StorageInfo,
-)
-from integration.irisys.exceptions import MalformedConfig
-from collections import Counter
-from queue import Queue
-from dataclass_factory import Factory
+from integration.base_integration import BasePullConnector
 from integration.irisys.config import IrisysCfg
-from google.cloud.storage import Client
-from expiringdict import ExpiringDict
+from integration.irisys.exceptions import MalformedConfig
 from integration.irisys.workers import (
-    GapsDetectionWorker, 
     FetchWorker,
-    StandrdizeWorker
+    GapsDetectionWorker,
+    StandrdizeWorker,
 )
+
 
 class IrisysConnector(BasePullConnector):
     """Irisys Integration"""
@@ -43,23 +33,20 @@ class IrisysConnector(BasePullConnector):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
 
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )
-        self._config: Optional[BraxosCfg] = None
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
+        self._config: Optional[IrisysCfg] = None
         self._gaps_worker: Optional[GapsDetectionWorker] = None
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
-        self._fetch_worker: Optional[FetchWorker] = None        
+        self._fetch_worker: Optional[FetchWorker] = None
 
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None  
+        self._standardize_worker: Optional[StandrdizeWorker] = None
 
-    # TODO: Review ability to move this method in base class 
+    # TODO: Review ability to move this method in base class
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
@@ -73,12 +60,11 @@ class IrisysConnector(BasePullConnector):
                 raise MalformedConfig from err
 
             self._gaps_worker = GapsDetectionWorker(
-                missed_hours_cache=self._missed_hours,
-                config=self._config
+                missed_hours_cache=self._missed_hours, config=self._config
             )
 
             self._fetch_worker = FetchWorker(
-                missed_hours = self._missed_hours, 
+                missed_hours=self._missed_hours,
                 fetched_files=self._fetched_files_q,
                 fetch_update=self._fetch_update_q,
                 config=self._config,
@@ -89,7 +75,7 @@ class IrisysConnector(BasePullConnector):
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,
                 config=self._config,
-            )            
+            )
 
         self._logger.debug(
             "Loaded configuration.",
@@ -100,7 +86,7 @@ class IrisysConnector(BasePullConnector):
             },
         )
 
-    # TODO: @todo After comletion check posibility move to some base class 
+    # TODO: @todo After comletion check posibility move to some base class
     def get_missed_hours(self) -> None:
         """Get list of missed hours"""
         # Standardized data stored separately by type meter. It means that it
@@ -111,13 +97,13 @@ class IrisysConnector(BasePullConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
             "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
         )
 
-    # TODO: @todo Redesign. Move to base class 
+    # TODO: @todo Redesign. Move to base class
     def fetch(self) -> None:
         with elapsed_timer() as ellapsed:
             self._logger.info("Fetching data.")
@@ -131,12 +117,9 @@ class IrisysConnector(BasePullConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
-            return None
-
-        self._fetch_worker.run(self._run_time)  
+            self._logger.error("The 'configure' method must be run before. Complete.")
+        else:
+            self._fetch_worker.run(self._run_time)
 
     # TODO: @todo Candidate to be in a base class
     def standardize(self) -> None:
@@ -171,17 +154,16 @@ def main(event, context):  # pylint:disable=unused-argument
         description="IRISYS INTEGRATION",
         trace_id=uuid.uuid4(),
     )
-    with elapsed_timer() as elapsed:
+    with elapsed_timer() as main_elapsed:
         connector = IrisysConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
         connector.configure(event)
         connector.run()
-        main_logger.info("Completed.", extra={"labels": {"elapsed_time": elapsed()}})
+        main_logger.info(
+            "Completed.", extra={"labels": {"elapsed_time": main_elapsed()}}
+        )
 
 
 if __name__ == "__main__":
-    import base64
-    from json import dumps, load
-
     CONNECTOR_NAME = "irisys"
     METERS_AMOUNT = 2
     debug_logger = Logger(
@@ -196,9 +178,9 @@ if __name__ == "__main__":
 
     debugpy.listen(CFG.DEBUG_PORT)
     debugpy.wait_for_client()  # blocks execution until client is attached
-    debugpy.breakpoint()    
+    debugpy.breakpoint()
 
-    with elapsed_timer() as elapsed:
+    with elapsed_timer() as debug_elapsed:
         for participant_id in CFG.DEBUG_PARTICIPANTS:
             for fl_idx in range(METERS_AMOUNT):
                 payload_file = CFG.LOCAL_PATH.joinpath(
@@ -219,5 +201,5 @@ if __name__ == "__main__":
                 main(event=event_sample, context=None)
             debug_logger.info(
                 "Completed integration",
-                extra={"labels": {"elapsed_time": elapsed()}},
+                extra={"labels": {"elapsed_time": debug_elapsed()}},
             )

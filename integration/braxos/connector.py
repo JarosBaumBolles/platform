@@ -1,51 +1,26 @@
 """Braxos Integration module"""
-import os
 import base64
 import uuid
-from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime
+from collections import Counter
 from io import StringIO
-from json import dumps, load, loads, JSONDecodeError
+from json import JSONDecodeError, dumps, load
+from queue import Queue
 from typing import Optional
-
-import pandas as pd
 import paramiko
-import pysftp
-from googleapiclient.errors import HttpError
-from pendulum import DateTime
-
+from dataclass_factory import Factory
+from expiringdict import ExpiringDict
 from common import settings as CFG
-from common.bucket_helpers import (
-    file_exists,
-    get_file_contents,
-    get_missed_standardized_files,
-    list_blobs_with_prefix,
-)
-from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.request_helpers import retry
-from integration.base_integration import (
-    BasePullConnector,
-    GeneralInfo,
-    MeterConfig,
-    Meters,
-    StorageInfo,
-)
-
-from dataclass_factory import Factory
-from queue import Queue
-from google.cloud.storage import Client
-from expiringdict import ExpiringDict
+from integration.base_integration import BasePullConnector
 from integration.braxos.config import BraxosCfg
 from integration.braxos.exception import MalformedConfig
 from integration.braxos.workers import (
-    GapsDetectionWorker,
     FetchWorker,
-    StandrdizeWorker
+    GapsDetectionWorker,
+    StandrdizeWorker,
 )
-from collections import Counter
+
 
 class BraxosConnector(BasePullConnector):
     """Braxos Integration Connector"""
@@ -58,10 +33,7 @@ class BraxosConnector(BasePullConnector):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
 
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
         self._config: Optional[BraxosCfg] = None
         self._gaps_worker: Optional[GapsDetectionWorker] = None
 
@@ -70,12 +42,12 @@ class BraxosConnector(BasePullConnector):
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
-        self._fetch_worker: Optional[FetchWorker] = None  
+        self._fetch_worker: Optional[FetchWorker] = None
 
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None                  
+        self._standardize_worker: Optional[StandrdizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
@@ -86,25 +58,22 @@ class BraxosConnector(BasePullConnector):
                     raise MalformedConfig("Recieved Malformed configuration JSON")
 
                 self._config = self._factory.load(js_config, BraxosCfg)
-                raw_key = (
-                    base64
-                    .b64decode(self._config.key.encode("utf-8"))
-                    .decode("utf-8")
-                )       
+                raw_key = base64.b64decode(self._config.key.encode("utf-8")).decode(
+                    "utf-8"
+                )
 
                 self._config.key = paramiko.RSAKey.from_private_key(
                     StringIO(raw_key[1:-1])
-                )         
+                )
             except (ValueError, TypeError, JSONDecodeError) as err:
                 raise MalformedConfig from err
 
             self._gaps_worker = GapsDetectionWorker(
-                missed_hours_cache=self._missed_hours,
-                config=self._config
+                missed_hours_cache=self._missed_hours, config=self._config
             )
 
             self._fetch_worker = FetchWorker(
-                missed_hours = self._missed_hours, 
+                missed_hours=self._missed_hours,
                 fetched_files=self._fetched_files_q,
                 fetch_update=self._fetch_update_q,
                 config=self._config,
@@ -115,7 +84,7 @@ class BraxosConnector(BasePullConnector):
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,
                 config=self._config,
-            )            
+            )
 
         self._logger.debug(
             "Loaded configuration.",
@@ -126,7 +95,7 @@ class BraxosConnector(BasePullConnector):
             },
         )
 
-    # TODO: @todo After comletion check posibility move to some base class 
+    # TODO: @todo After comletion check posibility move to some base class
     def get_missed_hours(self) -> None:
         """Get list of missed hours"""
         # Standardized data stored separately by type meter. It means that it
@@ -137,13 +106,13 @@ class BraxosConnector(BasePullConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
             "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
         )
 
-    # TODO: @todo Redesign. Move to base class 
+    # TODO: @todo Redesign. Move to base class
     def fetch(self) -> None:
         with elapsed_timer() as ellapsed:
             self._logger.info("Fetching data.")
@@ -157,12 +126,11 @@ class BraxosConnector(BasePullConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
+            self._logger.error("The 'configure' method must be run before. Complete.")
             return None
 
-        self._fetch_worker.run(self._run_time)    
+        self._fetch_worker.run(self._run_time)
+        return None
 
     # TODO: @todo Candidate to be in a base class
     def standardize(self) -> None:
@@ -206,7 +174,6 @@ def main(event, context):  # pylint:disable=unused-argument
 
 
 if __name__ == "__main__":
-    import base64
 
     CONNECTOR_NAME = "braxos"
     METERS_AMOUNT = 1
@@ -217,12 +184,12 @@ if __name__ == "__main__":
         trace_id=uuid.uuid4(),
     )
     debug_logger.info("Running BRAXOS integrations")
-    
+
     import debugpy
 
     debugpy.listen(CFG.DEBUG_PORT)
     debugpy.wait_for_client()  # blocks execution until client is attached
-    debugpy.breakpoint()    
+    debugpy.breakpoint()
 
     with elapsed_timer() as dbg_elapsed:
         for participant_id in CFG.DEBUG_PARTICIPANTS:
