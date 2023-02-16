@@ -30,7 +30,7 @@ from integration.willow.exceptions import (
 )
 
 RUN_GAPS_PARALLEL = True
-RUN_FETCH_PARALLEL = False
+RUN_FETCH_PARALLEL = True
 RUN_STANDARDIZE_PARALLEL = True
 
 
@@ -210,7 +210,7 @@ class FetchWorker(BaseFetchWorker):
                     url,
                     params=params,
                     headers=headers,
-                    timeout=self.__request_timeout__,
+                    timeout=self.__request_timeout__
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
