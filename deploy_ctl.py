@@ -76,14 +76,6 @@ if __name__ == "__main__":
         help="Specify whether to deploy site",
     )
     parser.add_argument(
-        "-F",
-        "--facit",
-        dest="facit",
-        action="store_true",
-        default=False,
-        help="Specify whether to deploy facit connector",
-    )
-    parser.add_argument(
         "-I",
         "--integrations",
         type=str,
@@ -105,6 +97,7 @@ if __name__ == "__main__":
             "xlsx",
             "ecostruxture",
             "coned",
+            "facit"
         ],
         help="Specify target integrations to deploy",
     )
@@ -427,38 +420,15 @@ if __name__ == "__main__":
                     "--region us-east4 "
                     "--allow-unauthenticated "
                     f"--project {PROJECT} "
-                    "--vpc-connector gcp-connector "
-                    "--egress-settings all "
+                    # "--vpc-connector gcp-connector "
+                    "--timeout 540 "                    
+                    "--ingress-settings=internal-and-gclb "
+                    # "--egress-settings all "
                     "--entry-point handle_request"
                 ),
             ),
         )
 
-    if arguments.deploy_all_services or arguments.facit:
-        SERVICE_USER = "cloud-functions-facit"
-        THREAD_POOL.apply_async(
-            lambda command: subprocess.check_call(command, shell=True),  # nosec
-            args=(
-                (
-                    f"gcloud iam service-accounts create {SERVICE_USER} --display-name='Service user for facit integration' --project {PROJECT}; "
-                    "gcloud functions deploy "
-                    f"connector_facit "
-                    f"--service-account {SERVICE_USER}@{arguments.environment}-epbp.iam.gserviceaccount.com "  # pylint:disable=line-too-long
-                    f"--source {BASE_SOURCE_URL}/{arguments.branch}/paths/ "
-                    f"--trigger-resource hourlybuildingdata_landing_zone "
-                    "--trigger-event google.storage.object.finalize "
-                    "--runtime python39 "
-                    "--memory 2048MB "
-                    "--timeout 540 "
-                    "--region us-east4 "
-                    "--no-allow-unauthenticated "
-                    f"--set-env-vars PROJECT={PROJECT} "
-                    "--ingress-settings=internal-and-gclb "
-                    f"--project {PROJECT} "
-                    "--entry-point start_facit_connector"
-                ),
-            ),
-        )
 
     THREAD_POOL.close()
     THREAD_POOL.join()
