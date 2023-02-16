@@ -123,13 +123,6 @@ class ConEdConnector(BasePullConnector):
                 },
             )        
 
-
-    def _get_meter_config_by_name(self, mtr_name: str) -> Optional[MeterCfg]:
-        for mtr_cfg in self._config.meters:
-            if mtr_cfg.meter_name == mtr_name:
-                return mtr_cfg
-        return None
-
     def fetch_and_standardize(self) -> None:
         """Fetch and standardize"""
         with elapsed_timer() as elapsed:
@@ -146,6 +139,12 @@ class ConEdConnector(BasePullConnector):
                 "ocp-apim-subscription-key": self._config.subscription_key,
                 "Content-Type": "application/json",
             }
+
+
+            self._logger.warning("Refreshing token")
+            self._logger.debug(f"Payload - {payload}")
+            self._logger.debug(f"Headers - {headers}")
+
             response = http_request(
                 "https://api.coned.com/gbc/v1/oauth/v1/Token",
                 payload=payload,
@@ -154,6 +153,8 @@ class ConEdConnector(BasePullConnector):
                 request_payload_type=PayloadType.JSON,
                 response_payload_type=PayloadType.JSON,
             )
+
+            self._logger.warning(f"Refreshed token - {response}")
 
             headers = {
                 "ocp-apim-subscription-key": self._config.subscription_key,
@@ -198,11 +199,11 @@ class ConEdConnector(BasePullConnector):
                             meter_response = http_request(
                                 (
                                     "https://api.coned.com/gbc/v1/resource/Subscription/"
-                                    f"{self._fetch_payload.subscription_id}/UsagePoint/"
-                                    f"{self._fetch_payload.usage_point_id}/MeterReading/"
-                                    f"{self._fetch_payload.meter_reading_id}/IntervalBlock/"
-                                    f"SP_{self._fetch_payload.usage_point_id}_KWH%20"
-                                    f"{self._fetch_payload.interval}%20Minute%20Interval%20"
+                                    f"{self._config.subscription_id}/UsagePoint/"
+                                    f"{self._config.usage_point_id}/MeterReading/"
+                                    f"{self._config.meter_reading_id}/IntervalBlock/"
+                                    f"SP_{self._config.usage_point_id}_KWH%20"
+                                    f"{self._config.interval}%20Minute%20Interval%20"
                                     "Read%20Interval"
                                 ),
                                 parameters={
@@ -225,7 +226,7 @@ class ConEdConnector(BasePullConnector):
                             ).timestamp()
                         )
                     ]
-                    interval = int(self._fetch_payload.interval)
+                    interval = int(self._config.interval)
                     for _ in range((60 // interval) - 1):
                         required_intervals.append(
                             required_intervals[-1] + (interval * 60)

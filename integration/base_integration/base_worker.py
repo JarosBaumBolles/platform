@@ -1,4 +1,5 @@
 """ WatTime Workers module"""
+import re
 import time
 import uuid
 from abc import abstractmethod
@@ -8,9 +9,11 @@ from json import JSONDecodeError, dumps, loads
 from pathlib import Path
 from queue import Queue
 from threading import Lock
-from typing import Any, Callable, Dict, Optional, Union, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from expiringdict import ExpiringDict
 from google.cloud.exceptions import GoogleCloudError
+from google.cloud.storage import Client
 from googleapiclient.errors import HttpError
 from pendulum import DateTime
 
@@ -18,15 +21,12 @@ import common.settings as CFG
 from common.bucket_helpers import file_exists, get_file_contents, upload_file_to_bucket
 from common.data_representation.standardized.meter import Meter
 from common.date_utils import format_date, truncate
+from common.logging import Logger, ThreadPoolExecutorLogger
 from common.request_helpers import retry
+from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration.exceptions import EmptyRawFile
 from integration.wattime.data import DataFile
-from common.logging import Logger, ThreadPoolExecutorLogger
-from expiringdict import ExpiringDict
-import re
-from google.cloud.storage import Client
-from common.thread_pool_executor import run_thread_pool_executor
-from copy import deepcopy
+
 
 @dataclass
 class UpdateConfig:
@@ -37,15 +37,16 @@ class UpdateConfig:
     file_name_preffix: str = ""
 
 
-class BaseWorker:
+class BaseWorker:  # pylint: disable=too-many-instance-attributes
     """Base Worker functionality"""
+
+    __description__ = "Base Worker"
+    __name__ = "Base Worker"
 
     __max_retry_count__ = 5
     __fetch_file_name_tmpl__ = "{base_file_name}_{idx}"
 
-    __update_chunk_main_part_regex__ = re.compile(
-        "^storage_([\w\-\/]+){1}[_]{1}\d+$"
-    )
+    __update_chunk_main_part_regex__ = re.compile(r"^storage_([\w\-\/]+){1}[_]{1}\d+$")
 
     __workers_amount__ = 10
 
@@ -64,13 +65,9 @@ class BaseWorker:
         self._update_filename_tmpl = update_filename_tmpl
         self._update_preffix = update_preffix
         self._max_chunk_size = max_chunk_size
-        self._logger = Logger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )
+        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
-            description=self.__description__, 
-            trace_id=self._trace_id
+            description=self.__description__, trace_id=self._trace_id
         )
 
     def process_consumer_results(self, futures, logs) -> None:
@@ -88,13 +85,10 @@ class BaseWorker:
             self._logger.log(level, message)
             logs.task_done()
 
-        self._th_logger.flush_logs() 
-
+        self._th_logger.flush_logs()
 
     def _run_consumers(
-        self, 
-        consumers: List[Tuple[Callable, List[Any]]],
-        run_parallel: bool = True
+        self, consumers: List[Tuple[Callable, List[Any]]], run_parallel: bool = True
     ) -> None:
         if not isinstance(consumers, list):
             consumers = [consumers]
@@ -110,62 +104,46 @@ class BaseWorker:
                             args,
                         )
                     ],
-                    worker_replica=self.__workers_amount__,                
+                    worker_replica=self.__workers_amount__,
                 )
             else:
                 args.append(f"worker_idx_{uuid.uuid4()}")
                 consumer(*args)
             self.process_consumer_results(futures, logs)
-    
+
     @staticmethod
     @retry((HttpError,))
     def _is_file_exists(
-        bucket: str, 
-        path: str, 
-        file_name: str,
-        client: Optional[Client] = None
+        bucket: str, path: str, file_name: str, client: Optional[Client] = None
     ) -> bool:
         return file_exists(
-            bucket=bucket,
-            subdirectory=path,
-            file_name=file_name,
-            client=client
+            bucket=bucket, subdirectory=path, file_name=file_name, client=client
         )
 
     @retry((HttpError,))
-    def _retry_load_json_data(
-        self, 
-        bucket: str, 
-        path: str, 
-        filename: str, 
-        client: Client,
-        logs: Queue
+    def _retry_load_json_data(  # pylint:disable=too-many-arguments
+        self, bucket: str, path: str, filename: str, client: Client, logs: Queue
     ) -> Dict:
         return self._load_json_data(
-            bucket=bucket, 
-            path=path, 
-            filename=filename, 
-            client=client,
-            logs=logs
+            bucket=bucket, path=path, filename=filename, client=client, logs=logs
         )
 
-    def _load_json_data(
+    def _load_json_data(  # pylint:disable=too-many-arguments
         self,
         bucket: str,
         path: str,
         filename: str,
         client: Client,
         logs: Queue,
-
     ) -> Union[bytes, str]:
         try:
             data = loads(
                 self._load_data(
-                    bucket=bucket, 
-                    path=path, 
-                    filename=filename, 
+                    bucket=bucket,
+                    path=path,
+                    filename=filename,
                     client=client,
-                    logs=logs
+                    logs=logs,
                 )
             )
         except JSONDecodeError as err:
@@ -180,39 +158,26 @@ class BaseWorker:
         return data
 
     @retry((HttpError,))
-    def _retry_load_data(
-        self, 
-        bucket: str, 
-        path: str, 
-        filename: str, 
-        client: Client,
-        logs: Queue
+    def _retry_load_data(  # pylint:disable=too-many-arguments
+        self, bucket: str, path: str, filename: str, client: Client, logs: Queue
     ) -> Dict:
         return self._load_data(
-            bucket=bucket, 
-            path=path, 
-            filename=filename, 
-            client=client,
-            logs=logs
+            bucket=bucket, path=path, filename=filename, client=client, logs=logs
         )
 
-    def _load_data(
-        self, 
+    # TODO @todo Refactor to avoid unused-argument
+    def _load_data(  # pylint:disable=too-many-arguments
+        self,
         bucket: str,
         path: str,
         filename: str,
         client: Client,
-        logs: Queue    
+        logs: Queue,  # pylint:disable=unused-argument
     ) -> Optional[str]:
         path = f'{path.lstrip("/")}'
         fl_path = f"{path}/{filename}"
 
-        return get_file_contents(
-            bucket_name=bucket,
-            blob_path=fl_path,
-            client=client
-        )
-    
+        return get_file_contents(bucket_name=bucket, blob_path=fl_path, client=client)
 
     def configure(self, run_time: DateTime) -> None:
         """Configure worker before run"""
@@ -300,6 +265,22 @@ class BaseWorker:
                         time.sleep(delay)
                 files_queue.task_done()
 
+    def _adjust_meter_date(
+        self, date: DateTime, truncate_lvl: Optional[str] = None
+    ) -> DateTime:
+        """Adjust meter time in accordance with the given configuration"""
+        mtr_dt = truncate(date, level=truncate_lvl) if truncate_lvl else date
+        time_shift = self._config.timestamp_shift.get("shift", None).strip().lower()
+        kwargs = self._config.timestamp_shift.get("shift_hours", {})
+
+        if kwargs and any(kwargs.values()):
+            if time_shift == "add":
+                return mtr_dt.add(**kwargs)
+            if time_shift.strip().lower() == "subtruct":
+                return mtr_dt.subtract(**kwargs)
+        return mtr_dt
+
+
 class BaseFetchWorker(BaseWorker):
     """Base Fetch Worker functionality"""
 
@@ -317,8 +298,7 @@ class BaseFetchWorker(BaseWorker):
         self._fetch_update_queue: Queue = fetch_update
         self._fetch_update_counter: Counter = Counter()
         self._fetch_update_file_buffer: ExpiringDict = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
+            max_len=2000, max_age_seconds=3600
         )
         self._update_config: Optional[UpdateConfig] = None
 
@@ -375,20 +355,14 @@ class BaseFetchWorker(BaseWorker):
         # update_config: UpdateConfig,
         chunk_id_key: str,
         chunk_storage: Queue,
-    ) -> None:        
-        chunk_reg = self.__update_chunk_main_part_regex__.match(
-            chunk_id_key
-        )
+    ) -> None:
+        chunk_reg = self.__update_chunk_main_part_regex__.match(chunk_id_key)
 
         if chunk_reg is not None:
             chunk_key = f"chunk_{chunk_reg.group(1)}"
             chunk_id = self._fetch_update_counter[chunk_key]
-            update_path = (
-                Path(
-                    self._update_config.path_preffix
-                ).joinpath(
-                    self._update_preffix
-                )
+            update_path = Path(self._update_config.path_preffix).joinpath(
+                self._update_preffix
             )
             self._fetch_update_queue.put(
                 DataFile(
@@ -407,12 +381,13 @@ class BaseFetchWorker(BaseWorker):
                     cfg={},
                 )
             )
-            
-    def _add_to_updates_generic(
+
+    # TODO: Should be refactored to avoid unused parameters
+    def _add_to_updates_generic(  # pylint:disable=too-many-arguments
         self,
         file: DataFile,
-        update_config: UpdateConfig,
-        update_queue: Queue,
+        update_config: UpdateConfig,  # pylint:disable=unused-argument
+        update_queue: Queue,  # pylint:disable=unused-argument
         update_counter: Counter,
         chunk_storage: Dict[str, Queue],
     ) -> None:
@@ -435,7 +410,7 @@ class BaseFetchWorker(BaseWorker):
                 self._finalize_update_status_generic(
                     chunk_id_key=chunk_idx_key,
                     chunk_storage=chunk_storage[chunk_idx_key],
-                )   
+                )
                 update_counter.pop(chunk_idx_key)
                 update_counter[chunk_key] += 1
             elif chunk_key not in update_counter:
@@ -445,11 +420,11 @@ class BaseFetchWorker(BaseWorker):
         """Save all not full chunk into update status"""
         with self._lock:
             while len(self._fetch_update_file_buffer):
-                chunk_id_key, chunk_storage = self._fetch_update_file_buffer.popitem()  
+                chunk_id_key, chunk_storage = self._fetch_update_file_buffer.popitem()
                 self._finalize_update_status_generic(
                     chunk_id_key=chunk_id_key,
                     chunk_storage=chunk_storage,
-                )        
+                )
 
 
 class BaseStandardizeWorker(BaseWorker):
@@ -470,11 +445,11 @@ class BaseStandardizeWorker(BaseWorker):
         self._st_files_queue: Queue = standardized_files
         self._st_update_queue: Queue = standardize_update
         self._st_update_file_buffer: ExpiringDict = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
+            max_len=2000, max_age_seconds=3600
         )
         self._st_update_counter = Counter()
         self._st_base_update_file_name: Optional[str] = None
+        self._fetch_update_file_buffer: Optional[ExpiringDict] = None
 
     def run_standardize_worker(
         self,
@@ -571,7 +546,8 @@ class BaseStandardizeWorker(BaseWorker):
 
         return meter
 
-    def _add_to_update(
+    # TODO: @todo Shoud be refactored to avoid arguments-differ
+    def _add_to_update(  # pylint:disable=arguments-differ
         self,
         file: DataFile,
     ) -> None:
@@ -588,7 +564,7 @@ class BaseStandardizeWorker(BaseWorker):
                 self._finalize_update_status_generic(
                     chunk_id_key=chunk_idx_key,
                     chunk_storage=self._st_update_file_buffer[chunk_idx_key],
-                )   
+                )
                 self._st_update_counter.pop(chunk_idx_key)
                 self._st_update_counter[chunk_key] += 1
             elif chunk_key not in self._st_update_counter:
@@ -600,39 +576,31 @@ class BaseStandardizeWorker(BaseWorker):
             while len(self._st_update_file_buffer):
                 chunk_id_key, chunk_storage = self._st_update_file_buffer.popitem()
 
-                chunk_reg = self.__update_chunk_main_part_regex__.match(
-                    chunk_id_key
-                )
+                chunk_reg = self.__update_chunk_main_part_regex__.match(chunk_id_key)
 
                 if chunk_reg is not None:
                     self._finalize_update_status_generic(
                         chunk_id_key=chunk_id_key,
                         chunk_storage=chunk_storage,
-                    )                  
+                    )
 
     def _finalize_update_status_generic(
         self,
         chunk_id_key: str,
         chunk_storage: Queue,
-    ) -> None:        
-        chunk_reg = self.__update_chunk_main_part_regex__.match(
-            chunk_id_key
-        )
+    ) -> None:
+        chunk_reg = self.__update_chunk_main_part_regex__.match(chunk_id_key)
 
         if chunk_reg is not None:
             chunk_key = f"chunk_{chunk_reg.group(1)}"
             chunk_id = self._st_update_counter[chunk_key]
-            # std_files = list(chunk_storage.queue)
-            # update_path = Path(std_files[0]["path"]).joinpath(
-            #     self._update_preffix
-            # )          
 
             update_path, bucket = None, ""
 
             update = {
                 "amounts": self._st_update_counter[chunk_id_key],
                 "files": [],
-                "updates": []
+                "updates": [],
             }
 
             while not chunk_storage.empty():
@@ -642,30 +610,28 @@ class BaseStandardizeWorker(BaseWorker):
                     update_path = Path(mtr_file.path).joinpath(self._update_preffix)
                     bucket = mtr_file.bucket
 
-                update["files"].append({
-                    "bucket": mtr_file.bucket,
-                    "path": mtr_file.path,
-                    "filename": mtr_file.file_name
-                })
+                update["files"].append(
+                    {
+                        "bucket": mtr_file.bucket,
+                        "path": mtr_file.path,
+                        "filename": mtr_file.file_name,
+                    }
+                )
 
                 update["updates"].append(
                     {
                         "ref_hour_id": int(
                             format_date(
-                                mtr_file.meter.start_time,
-                                CFG.HOUR_ID_DATE_FORMAT
+                                mtr_file.meter.start_time, CFG.HOUR_ID_DATE_FORMAT
                             )
                         ),
-                        "ref_participant_id": int(
-                            self._config.extra.participant_id
-                            ),
+                        "ref_participant_id": int(self._config.extra.participant_id),
                         "ref_meter_id": int(mtr_file.meter.meter_id),
-                        "data": float(mtr_file.meter.usage)
+                        "data": float(mtr_file.meter.usage),
                     }
                 )
 
                 chunk_storage.task_done()
-
 
             self._st_update_queue.put(
                 DataFile(
@@ -685,12 +651,11 @@ class BaseStandardizeWorker(BaseWorker):
         """Save all not full chunk into update status"""
         with self._lock:
             while len(self._st_update_file_buffer):
-                chunk_id_key, chunk_storage = self._fetch_update_file_buffer.popitem()  
+                chunk_id_key, chunk_storage = self._fetch_update_file_buffer.popitem()
                 self._finalize_update_status_generic(
                     chunk_id_key=chunk_id_key,
                     chunk_storage=chunk_storage,
-                )   
-
+                )
 
     @abstractmethod
     def _standardize(self, raw_file_obj: DataFile) -> DataFile:

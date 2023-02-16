@@ -785,30 +785,35 @@ class BasePullConnector(BaseConnector):
     def __init__(self, env_tz_info: str) -> None:
         super().__init__(env_tz_info=env_tz_info)
         self._fetched_files: Dict[str, Set[Any]] = defaultdict(set)
-        self._standardized_files: Dict[str, Set[Any]] = defaultdict(set)
+        self._standardized_files: Dict[str, List[Any]] = defaultdict(list)
 
         self._cfg_fetch: Optional[Any] = None  # should be replaced in child
         self._cfg_meters: Optional[Any] = None  # should be replaced in child
+        self._config: Optional[Any] = None  # should be replaced in child
 
     def _save_fetched_data(
         self, blob_text: str, filename: str, meter_name: str
     ) -> None:
         try:
             upload_file_to_bucket(
-                self._cfg_fetch.storage.bucket,
+                self._config.extra.raw.bucket,
                 dumps(blob_text),
-                blob_path=self._cfg_fetch.storage.path,
+                blob_path=self._config.extra.raw.path,
                 file_name=filename,
             )
         except GoogleCloudError as err:
             self._logger.error(
                 f"Cannot save meter '{meter_name}' file "
-                f"{self._cfg_fetch.storage.bucket}/{self._cfg_fetch.storage.path}"
+                f"{self._config.raw.bucket}/{self._config.extra.raw.path}"
                 f"/{filename} due to the error '{err}'"
             )
         else:
             self._fetched_files[meter_name].add(
-                (self._cfg_fetch.storage.bucket, self._cfg_fetch.storage.path, filename)
+                (
+                    self._config.extra.raw.bucket, 
+                    self._config.extra.raw.path, 
+                    filename
+                )
             )
 
     def _save_standardized_data(
@@ -818,29 +823,30 @@ class BasePullConnector(BaseConnector):
             self._logger.debug("Saving standardized data.")
             try:
                 upload_file_to_bucket(
-                    mtr_cfg.storage.bucket,
+                    mtr_cfg.standardized.bucket,
                     data.as_str(),
-                    blob_path=mtr_cfg.storage.path,
+                    blob_path=mtr_cfg.standardized.path,
                     file_name=filename,
                 )
             except GoogleCloudError as err:
                 self._logger.error(
                     "Cannot save standardized meter data of "
-                    f"{mtr_cfg.meter_type} and hour '{filename}' by path "
-                    f"{mtr_cfg.storage.bucket}/{mtr_cfg.storage.path}/{filename} "
-                    f'due to the error "{err}"'
+                    f"{mtr_cfg.type} and hour '{filename}' by path "
+                    f"{mtr_cfg.standardized.bucket}/{mtr_cfg.standardized.path}"
+                    f"/{filename} due to the error '{err}'"
                 )
             else:
-                self._standardized_files[mtr_cfg.meter_type.strip().lower()].add(
+                self._standardized_files[mtr_cfg.type.strip().lower()].append(
                     (
-                        mtr_cfg.storage.bucket,
-                        mtr_cfg.storage.path,
+                        mtr_cfg.standardized.bucket,
+                        mtr_cfg.standardized.path,
                         filename,
+                        data,
                     )
                 )
             self._logger.debug(
-                f"Saved standardized data into {mtr_cfg.storage.bucket}/"
-                f"{mtr_cfg.storage.path}/{filename}.",
+                f"Saved standardized data into {mtr_cfg.standardized.bucket}/"
+                f"{mtr_cfg.standardized.path}/{filename}.",
                 extra={"labels": {"elapsed_time": elapsed()}},
             )
 
@@ -853,7 +859,7 @@ class BasePullConnector(BaseConnector):
             )
             try:
                 upload_file_to_bucket(
-                    self._cfg_fetch.storage.bucket,
+                    self._config.extra.raw.bucket,
                     dumps(raw_data),
                     blob_path=str_path,
                     file_name=filename,
@@ -894,9 +900,9 @@ class BasePullConnector(BaseConnector):
             if json_data["files"]:
                 self._upload_update_status_file(
                     raw_data=json_data,
-                    str_bucket=self._cfg_fetch.storage.bucket,
+                    str_bucket=self._config.extra.raw.bucket,
                     str_path=(
-                        f"{self._cfg_fetch.storage.path}/{self.__update_prefix__}"
+                        f"{self._config.extra.raw.path}/{self.__update_prefix__}"
                     ),
                     filename=filename,
                 )
@@ -904,46 +910,90 @@ class BasePullConnector(BaseConnector):
                 self._logger.warning("Fetch update status is empty.")
         self._logger.debug(
             f"Saved fetch update status for '{filename}' hour in "
-            f"{self._cfg_fetch.storage.bucket}.",
+            f"{self._config.extra.raw.bucket}.",
             extra={"labels": {"elapsed_time": elapsed()}},
         )
+
+    def _get_meter_config_by_name(self, mtr_name: str) -> Optional[Any]:
+        for mtr_cfg in self._config.meters:
+            if mtr_cfg.meter_name.strip().lower() == mtr_name.strip().lower():
+                return mtr_cfg
+        return None
+
+    def _get_meter_config_by_type(self, mtr_type: str) -> Optional[Any]:
+        for mtr_cfg in self._config.meters:
+            self._logger.debug(
+                f"meter type is - {mtr_cfg.type}"
+            )
+            if mtr_cfg.type.strip().lower() == mtr_type.strip().lower():
+                return mtr_cfg
+        return None        
 
     def _save_standardize_update_status(self) -> None:
         with elapsed_timer() as elapsed:
             self._logger.debug("Saving standardize update status.")
             filename = format_date(self._run_time, CFG.PROCESSING_DATE_FORMAT)
+            self._logger.debug(
+                f"Standardized files items - {list(self._standardized_files.keys())}"
+            )
             for mtr_type, mtr_files in self._standardized_files.items():
-                mtr_cfg = self._cfg_meters.meters.get(mtr_type)
+                mtr_cfg = self._get_meter_config_by_type(mtr_type)
                 if not mtr_cfg:
                     self._logger.error(
                         "Cannot find meter config for the given type "
-                        f"{mtr_cfg}. Skipping"
-                    )
+                        f"{mtr_type}. Skipping"
+                    )                 
                     continue
                 cache = set()
                 json_data = {"files": []}
                 for mtr_fl_info in mtr_files:
-                    if mtr_fl_info not in cache:
-                        json_data["files"].append(
-                            {
-                                "bucket": mtr_fl_info[0],
-                                "path": mtr_fl_info[1],
-                                "filename": mtr_fl_info[2],
-                            }
-                        )
-                        cache.add(mtr_fl_info)
+                    key = mtr_fl_info[:-1]
+                    if key not in cache:
+                        json_data["files"].append(mtr_fl_info)
+                        cache.add(key)
 
                 if json_data["files"]:
                     chunks = self.split_into_chunks(
                         json_data["files"], self.__max_chunk_size__
                     )
-                    save_path = Path(mtr_cfg.storage.path).joinpath(
+                    save_path = Path(mtr_cfg.standardized.path).joinpath(
                         self.__update_prefix__
                     )
                     for indx, chunk in enumerate(chunks, 1):
+                        data = {
+                            "amounts": len(chunk),
+                            "files": [],
+                            "updates": []
+                        }
+
+                        for bucket, path, filename, mtr in chunk:
+                            data["files"].append(
+                                {
+                                    "bucket": bucket,
+                                    "path": path,
+                                    "filename": filename
+                                }
+                            )
+
+                            data["updates"].append(
+                                {
+                                    "data":float(mtr.usage),
+                                    "ref_hour_id": int(
+                                        format_date(
+                                            mtr.start_time,
+                                            CFG.HOUR_ID_DATE_FORMAT
+                                        )
+                                    ),
+                                    "ref_meter_id": int(mtr.meter_id),
+                                    "ref_participant_id": int(
+                                        self._config.extra.participant_id
+                                    )
+                                }
+                            )
+
                         self._upload_update_status_file(
-                            raw_data={"files": chunk},
-                            str_bucket=mtr_cfg.storage.bucket,
+                            raw_data=data,
+                            str_bucket=mtr_cfg.standardized.bucket,
                             str_path=str(save_path),
                             filename=self.__update_filename_tmpl__.format(
                                 update_prefix=self.__update_prefix__,

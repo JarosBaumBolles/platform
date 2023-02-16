@@ -72,7 +72,6 @@ class GapsDetectionWorker(BaseFetchWorker):
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)        
 
-
     def missed_hours_consumer(
         self,
         storage_client: Client,
