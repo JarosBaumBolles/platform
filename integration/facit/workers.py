@@ -184,7 +184,7 @@ class FetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Facit Standardization Worker."""
 
     __created_by__ = "Facit Connector"

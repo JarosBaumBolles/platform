@@ -2,8 +2,11 @@
 
     MVP. At the moment contains simliest sync approach.
     All operations run one by one without any paralelization approach.
-    This way used to provide first deliverable MVP asap/ In next iteration code
+    This way used to provide first deliverable MVP asap. In next iteration code
     below should be redesigned aith asyncio approarch.
+
+
+    TOTALY OBSOLETE. SHOULD BE Redesigned
 """
 import base64
 import logging
@@ -92,7 +95,7 @@ class DwLoadConnector(BasePullConnector):
     def configure(self, conf_data: bytes) -> None:
         with elapsed_timer() as elapsed:
             logging.debug(f"DEBUG: {self.__description__}: Loading configuration.")
-            js_config = self.parse_base_configuration(conf_data)
+            js_config = self._before_configuration(conf_data)
             self._historic_update_prefix += f'_{js_config["function_id"]}'
 
             meters_list = js_config.get("meters", [])

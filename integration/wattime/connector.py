@@ -2,32 +2,28 @@
 import base64
 import uuid
 from abc import abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from json import JSONDecodeError, dumps, load
 from queue import Queue
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union
 
 from dataclass_factory import Factory
+from expiringdict import ExpiringDict
 
 from common import settings as CFG
-from common.bucket_helpers import get_missed_standardized_files
-from common.date_utils import format_date, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration import BasePullConnector
-from integration.wattime.config import FetchPayload, WattimeCfg
-from integration.wattime.exceptions import AverageEmmisionsInterrupt, MalformedConfig
+from integration.wattime.config import WattimeCfg
+from integration.wattime.exceptions import MalformedConfig
 from integration.wattime.worker import (
+    AverageEmFetchWorker,
+    AverageEmGapsDetectionWorker,
+    AverageEmStandardizeWorker,
     MarginalEmFetchWorker,
     MarginalEmGapsDetectionWorker,
-    MarginalEmStandrdizeWorker,
-
-    AverageEmGapsDetectionWorker,
-    AverageEmFetchWorker,
-    AverageEmStandrdizeWorker    
+    MarginalEmStandardizeWorker,
 )
-from expiringdict import ExpiringDict
 
 
 class WatTimeBaseConnector(BasePullConnector):
@@ -46,32 +42,27 @@ class WatTimeBaseConnector(BasePullConnector):
 
         self._is_fetch_run: bool = False
 
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
         self._config: Optional[WattimeCfg] = None
-        self._gaps_worker: Optional[Union[MarginalEmGapsDetectionWorker, AverageEmGapsDetectionWorker]] = None
+        self._gaps_worker: Optional[
+            Union[MarginalEmGapsDetectionWorker, AverageEmGapsDetectionWorker]
+        ] = None
 
         # TODO: SHOULD be moved to the BasePullConnector and propagated to
         # the other pull integrations
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
-        self._fetch_worker: Optional[Union[MarginalEmFetchWorker, AverageEmFetchWorker]] = None
+        self._fetch_worker: Optional[
+            Union[MarginalEmFetchWorker, AverageEmFetchWorker]
+        ] = None
 
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[Union[MarginalEmStandrdizeWorker, AverageEmStandrdizeWorker]] = None
-
-    def fetch(self) -> None:
-        with elapsed_timer() as ellapsed:
-            self._logger.info("Fetching data.")
-            self._fetch_data()
-            self._logger.debug(
-                "Fetched missed hours.", extra={"labels": {"elapsed_time": ellapsed()}}
-            )
+        self._standardize_worker: Optional[
+            Union[MarginalEmStandardizeWorker, AverageEmStandardizeWorker]
+        ] = None
 
     def fetch(self) -> None:
         with elapsed_timer() as ellapsed:
@@ -86,18 +77,15 @@ class WatTimeBaseConnector(BasePullConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
-            return None
-
-        self._fetch_worker.run(self._run_time)      
+            self._logger.error("The 'configure' method must be run before. Complete.")
+        else:
+            self._fetch_worker.run(self._run_time)
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
 
@@ -137,7 +125,7 @@ class WatTimeBaseConnector(BasePullConnector):
         self.get_missed_hours()
         self.fetch()
         self.standardize()
- 
+
     @abstractmethod
     def get_missed_hours(self) -> None:
         """Get missed files"""
@@ -148,32 +136,30 @@ class WatTimeMarginalEmissionsConnector(WatTimeBaseConnector):
 
     __created_by__ = "Wattime Marginal Emissions Connector"
     __description__ = "Wattime Marginal Emissions Integration"
-    __name__ = "Wattime Marginal Emissions Connector"    
+    __name__ = "Wattime Marginal Emissions Connector"
     __fetch_url__ = "https://api2.watttime.org/v2/data"
     __workers_amount__ = 10
 
     def configure(self, conf_data: bytes) -> None:
         super().configure(conf_data)
 
-
         self._gaps_worker = MarginalEmGapsDetectionWorker(
-            missed_hours_cache=self._missed_hours,
-            config=self._config
+            missed_hours_cache=self._missed_hours, config=self._config
         )
 
         self._fetch_worker = MarginalEmFetchWorker(
-            missed_hours = self._missed_hours, 
+            missed_hours=self._missed_hours,
             fetched_files=self._fetched_files_q,
             fetch_update=self._fetch_update_q,
             config=self._config,
         )
 
-        self._standardize_worker = MarginalEmStandrdizeWorker(
+        self._standardize_worker = MarginalEmStandardizeWorker(
             raw_files=self._fetched_files_q,
             standardized_files=self._standardized_files,
             standardize_update=self._standardized_update_files,
             config=self._config,
-        ) 
+        )
 
     def get_missed_hours(self) -> None:
         """
@@ -187,11 +173,11 @@ class WatTimeMarginalEmissionsConnector(WatTimeBaseConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
             "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
-        )       
+        )
 
 
 class WatTimeAverageEmissionsConnector(WatTimeBaseConnector):
@@ -237,23 +223,22 @@ class WatTimeAverageEmissionsConnector(WatTimeBaseConnector):
         super().configure(conf_data)
 
         self._gaps_worker = AverageEmGapsDetectionWorker(
-            missed_hours_cache=self._missed_hours,
-            config=self._config
+            missed_hours_cache=self._missed_hours, config=self._config
         )
 
         self._fetch_worker = AverageEmFetchWorker(
-            missed_hours = self._missed_hours, 
+            missed_hours=self._missed_hours,
             fetched_files=self._fetched_files_q,
             fetch_update=self._fetch_update_q,
             config=self._config,
         )
 
-        self._standardize_worker = AverageEmStandrdizeWorker(
+        self._standardize_worker = AverageEmStandardizeWorker(
             raw_files=self._fetched_files_q,
             standardized_files=self._standardized_files,
             standardize_update=self._standardized_update_files,
             config=self._config,
-        ) 
+        )
 
     def get_missed_hours(self) -> None:
         # Standardized data stored separately by type meter. It means that it
@@ -264,7 +249,7 @@ class WatTimeAverageEmissionsConnector(WatTimeBaseConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
             "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}

@@ -26,3 +26,13 @@ class StandardizedFile:
     body: str = ""
     meter: Meter = field(default_factory=lambda: Meter())
     cfg: Any = ""    
+
+@dataclass
+class DataFile:
+    """Data file structure"""
+
+    file_name: str = ""
+    bucket: str = ""
+    path: str = ""
+    body: str = ""
+    cfg: Any = ""    

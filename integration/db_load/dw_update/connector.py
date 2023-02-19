@@ -679,7 +679,7 @@ class DwUpdateConnector(BasePullConnector):
         with elapsed_timer() as elapsed:
             self._logger.debug("Loading configuration.")
 
-            js_config = self.parse_base_configuration(conf_data)
+            js_config = self._before_configuration(conf_data)
             self._logger.debug("Loading participant configuration.")
 
             if js_config["scope"] == DwScope.participant.value:

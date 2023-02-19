@@ -1,11 +1,17 @@
 """ ConEd integration module"""
 
+import base64
 import datetime
 import math
 import uuid
 import xml.etree.ElementTree as ET
 from abc import abstractmethod
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict
+from json import JSONDecodeError, loads, load, dumps
+from pathlib import Path
+from typing import Optional
+
+from dataclass_factory import Factory
 
 from common import settings as CFG
 from common.bucket_helpers import get_missed_standardized_files
@@ -14,49 +20,12 @@ from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from common.request_helpers import (
     HTTPRequestMethod,
+    JBBRequestHelperException,
     PayloadType,
     http_request,
-    JBBRequestHelperException,
 )
-
-from json import loads, JSONDecodeError
-# from integration.base_integration import (
-#     BasePullConnector,
-#     GeneralInfo,
-#     MeterConfig,
-#     Meters,
-#     StorageInfo,
-# )
-from integration.base_integration import (
-    BasePullConnector, 
-    MalformedConfig
-)
-
-from pathlib import Path
-from dataclass_factory import Factory
-from integration.coned.config import ConedCfg, MeterCfg
-from typing import Optional, Dict, List
-
-# @dataclass
-# class FetchPayload:
-#     """Fetch Payload"""
-
-#     refresh_token: str = ""
-#     client_id: str = ""
-#     client_secret: str = ""
-#     subscription_id: str = ""
-#     usage_point_id: str = ""
-#     subscription_key: str = ""
-#     meter_reading_id: str = ""
-#     interval: str = ""
-
-
-# @dataclass
-# class FetchConfiguration:
-#     """Fetch Configuration"""
-
-#     gap_regeneration_window: int = 0
-#     storage: StorageInfo = field(default_factory=StorageInfo)
+from integration.base_integration import BasePullConnector, MalformedConfig
+from integration.coned.config import ConedCfg
 
 
 class ConEdConnector(BasePullConnector):
@@ -68,11 +37,7 @@ class ConEdConnector(BasePullConnector):
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
-        self._config: Optional[ConedCfg] = None                
-        # self._cfg_meters = Meters()
-        # self._cfg_general = GeneralInfo()
-        # self._fetch_payload = FetchPayload()
-        # self._cfg_fetch = FetchConfiguration()
+        self._config: Optional[ConedCfg] = None
         self._missed_hours = {}
 
     def get_missed_hours(self) -> None:
@@ -103,13 +68,13 @@ class ConEdConnector(BasePullConnector):
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, ConedCfg)
 
                 self._config.timestamp_shift = loads(
-                    self._config.timestamp_shift.replace("'", "\"")
+                    self._config.timestamp_shift.replace("'", '"')
                 )
             except (ValueError, TypeError, JSONDecodeError) as err:
                 raise MalformedConfig from err
@@ -121,7 +86,7 @@ class ConEdConnector(BasePullConnector):
                         "elapsed_teime": elapsed(),
                     }
                 },
-            )        
+            )
 
     def fetch_and_standardize(self) -> None:
         """Fetch and standardize"""
@@ -139,7 +104,6 @@ class ConEdConnector(BasePullConnector):
                 "ocp-apim-subscription-key": self._config.subscription_key,
                 "Content-Type": "application/json",
             }
-
 
             self._logger.warning("Refreshing token")
             self._logger.debug(f"Payload - {payload}")
@@ -248,21 +212,35 @@ class ConEdConnector(BasePullConnector):
                                 if item3.tag != "{http://naesb.org/espi}intervalBlocks":
                                     continue
                                 for item4 in item3:
-                                    if (item4.tag != "{http://naesb.org/espi}intervalBlock"):
+                                    if (
+                                        item4.tag
+                                        != "{http://naesb.org/espi}intervalBlock"
+                                    ):
                                         continue
                                     for item5 in item4:
-                                        if (item5.tag == "{http://naesb.org/espi}intervalReading"):
+                                        if (
+                                            item5.tag
+                                            == "{http://naesb.org/espi}intervalReading"
+                                        ):
                                             current_value = None
                                             applicable = False
                                             for item6 in item5:
-                                                if (item6.tag == "{http://naesb.org/espi}value"):
+                                                if (
+                                                    item6.tag
+                                                    == "{http://naesb.org/espi}value"
+                                                ):
                                                     current_value = float(item6.text)
-                                                elif (item6.tag == "{http://naesb.org/espi}timePeriod"):
+                                                elif (
+                                                    item6.tag
+                                                    == "{http://naesb.org/espi}timePeriod"
+                                                ):
                                                     for item7 in item6:
                                                         if (
-                                                            item7.tag == "{http://naesb.org/espi}start"
+                                                            item7.tag
+                                                            == "{http://naesb.org/espi}start"
                                                         ) and (
-                                                            int(item7.text) in required_intervals
+                                                            int(item7.text)
+                                                            in required_intervals
                                                         ):
                                                             applicable = True
                                                             data_was_found = True
@@ -327,9 +305,6 @@ def main(event, context):  # pylint:disable=unused-argument
 
 
 if __name__ == "__main__":
-    import base64
-    from json import dumps, load
-
     CONNECTOR_NAME = "coned"
     METERS_QUANTITY = 12
 
@@ -344,7 +319,7 @@ if __name__ == "__main__":
 
     debugpy.listen(CFG.DEBUG_PORT)
     debugpy.wait_for_client()  # blocks execution until client is attached
-    debugpy.breakpoint()    
+    debugpy.breakpoint()
     with elapsed_timer() as dbg_elapsed:
         for participant_id in CFG.DEBUG_PARTICIPANTS:
             for call_idx in range(METERS_QUANTITY + 1):

@@ -1,28 +1,22 @@
 """Nantum Date Shift integration."""
 import base64
 import uuid
-from abc import abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from json import JSONDecodeError, dumps, load, loads
 from queue import Queue
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional
 
 from dataclass_factory import Factory
-from pendulum import DateTime
-
+from expiringdict import ExpiringDict
+from ci_tools.integrations.manual.date_shift.base.workers import (
+    FetchWorker,
+    StandardizeWorker,
+)
 from common import settings as CFG
-from common.bucket_helpers import get_missed_standardized_files
-from common.date_utils import format_date, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration import BasePullConnector, MalformedConfig
 from integration.nantum.config import NantumCfg
-from ci_tools.integrations.manual.date_shift.base.workers import (
-    FetchWorker, 
-    StandrdizeWorker
-)
-from expiringdict import ExpiringDict
 
 
 class NantumBaseConnector(BasePullConnector):
@@ -36,13 +30,13 @@ class NantumBaseConnector(BasePullConnector):
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, NantumCfg)
 
                 self._config.timestamp_shift = loads(
-                    self._config.timestamp_shift.replace("'", "\"")
+                    self._config.timestamp_shift.replace("'", '"')
                 )
             except (ValueError, TypeError, JSONDecodeError) as err:
                 raise MalformedConfig from err
@@ -60,7 +54,8 @@ class NantumBaseConnector(BasePullConnector):
         super().run()
         self.fetch()
         self.standardize()
-        
+
+
 class NantumConnector(NantumBaseConnector):
     """Natum Shift Connector"""
 
@@ -73,19 +68,16 @@ class NantumConnector(NantumBaseConnector):
         self._factory = Factory()
 
         self._config: Optional[NantumCfg] = None
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )     
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
-        self._fetch_worker: Optional[FetchWorker] = None 
+        self._fetch_worker: Optional[FetchWorker] = None
 
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None                   
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         super().configure(conf_data)
@@ -96,7 +88,7 @@ class NantumConnector(NantumBaseConnector):
             config=self._config,
         )
 
-        self._standardize_worker = StandrdizeWorker(
+        self._standardize_worker = StandardizeWorker(
             raw_files=self._fetched_files_q,
             standardized_files=self._standardized_files,
             standardize_update=self._standardized_update_files,
@@ -116,12 +108,9 @@ class NantumConnector(NantumBaseConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
-            return None
-
-        self._fetch_worker.run(self._run_time)    
+            self._logger.error("The 'configure' method must be run before. Complete.")
+        else:
+            self._fetch_worker.run(self._run_time)
 
     def standardize(self) -> None:
         with elapsed_timer() as elapsed:
@@ -138,6 +127,7 @@ class NantumConnector(NantumBaseConnector):
                 extra={"labels": {"elapsed_time": elapsed()}},
             )
         return None
+
 
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""

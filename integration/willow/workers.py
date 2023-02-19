@@ -110,10 +110,8 @@ class GapsDetectionWorker(BaseFetchWorker):
         """Run loop entrypoint"""
         self.configure(run_time=run_time)
         self._run_consumers(
-            (
-                self.missed_hours_consumer, [require_client()]
-            ),
-            run_parallel=RUN_GAPS_PARALLEL
+            (self.missed_hours_consumer, [require_client()]),
+            run_parallel=RUN_GAPS_PARALLEL,
         )
 
     # TODO: should be removed
@@ -210,7 +208,7 @@ class FetchWorker(BaseFetchWorker):
                     url,
                     params=params,
                     headers=headers,
-                    timeout=self.__request_timeout__
+                    timeout=self.__request_timeout__,
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
@@ -269,7 +267,7 @@ class FetchWorker(BaseFetchWorker):
                 retry_count += 1
                 delay = retry_count * self.__retry_delay__
                 time.sleep(delay)
-                                
+
             except (requests.ConnectionError, requests.ConnectTimeout):
                 retry_count += 1
                 delay = retry_count * self.__retry_delay__
@@ -368,14 +366,14 @@ class FetchWorker(BaseFetchWorker):
                 (self.fetch_consumer, [require_client()]),
                 (self.save_fetched_files_worker, []),
             ],
-            run_parallel=RUN_FETCH_PARALLEL
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
         self._run_consumers(
             [
                 (self.save_fetch_status_worker, []),
             ],
-            run_parallel=RUN_FETCH_PARALLEL
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self._logger.info("Fetching has been done.")
 
@@ -385,7 +383,7 @@ class FetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Willow Standardization Worker."""
 
     __created_by__ = "Willow Connector"
@@ -500,12 +498,10 @@ class StandrdizeWorker(BaseStandardizeWorker):
                 (self.run_standardize_worker, []),
                 (self.save_standardized_files_worker, []),
             ],
-            run_parallel=RUN_STANDARDIZE_PARALLEL
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
         self.finalize_standardize_update_status()
         self._run_consumers(
-            [
-                (self.save_standardize_status_worker, [])
-            ],
-            run_parallel=RUN_STANDARDIZE_PARALLEL
+            [(self.save_standardize_status_worker, [])],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
