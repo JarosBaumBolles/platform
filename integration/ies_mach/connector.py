@@ -4,10 +4,7 @@ import uuid
 from json import dumps, load
 from queue import Queue
 from typing import Optional
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 from common import settings as CFG
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
@@ -44,11 +41,7 @@ class IESMachConnector(BasePullConnector):
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-<<<<<<< Updated upstream
-            self._config = self._get_config(conf_data, IesMachCfg)
-=======
             self._config = self._config_factory(data, IesMachCfg)
->>>>>>> Stashed changes
             self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
 
         self._logger.debug(
@@ -60,8 +53,6 @@ class IESMachConnector(BasePullConnector):
             },
         )
 
-<<<<<<< Updated upstream
-=======
     def _after_configuration(self, config: IesMachCfg, *args, **kwargs) -> IesMachCfg:
         """Actions before config parser"""
         super()._after_configuration(config, *args, **kwargs)
@@ -74,7 +65,6 @@ class IESMachConnector(BasePullConnector):
             config.time_zone = self.__right_timezones__[0]
         return config
 
->>>>>>> Stashed changes
 
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""

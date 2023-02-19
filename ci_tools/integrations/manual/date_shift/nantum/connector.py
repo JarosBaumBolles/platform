@@ -8,10 +8,6 @@ from typing import Optional
 
 from dataclass_factory import Factory
 from expiringdict import ExpiringDict
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 from ci_tools.integrations.manual.date_shift.base.workers import (
     FetchWorker,
     StandardizeWorker,

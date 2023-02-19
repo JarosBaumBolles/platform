@@ -13,9 +13,6 @@ from json import dumps, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
 from queue import Queue
-<<<<<<< Updated upstream
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
-=======
 from typing import (
     Any,
     Callable,
@@ -29,7 +26,6 @@ from typing import (
     TypeVar,
     Union,
 )
->>>>>>> Stashed changes
 
 from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
@@ -51,14 +47,10 @@ from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration.config import StorageInfo
-<<<<<<< Updated upstream
-from integration.base_integration.exceptions import MalformedConfig
-=======
 from integration.base_integration.exceptions import (
     ConfigValidationError,
     MalformedConfig,
 )
->>>>>>> Stashed changes
 
 MAX_ID_VALUE = 9223372036854775807
 DEFAULT_WORKER_REPLICA_AMOUNT = 20
@@ -128,24 +120,6 @@ class BaseConnector(BaseAbstractConnnector):
         self._factory = Factory(
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
-<<<<<<< Updated upstream
-
-        self._config: Optional[Any] = None
-
-        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
-
-        self._fetched_files_q: Queue = Queue()
-        self._fetch_update_q: Queue = Queue()
-
-        self._standardized_files: Queue = Queue()
-        self._standardized_update_files: Queue = Queue()
-        self._standardized_files_count: Counter = Counter()
-
-        self._gaps_worker: Optional[Any] = None
-        self._fetch_worker: Optional[Any] = None
-        self._standardize_worker: Optional[Any] = None
-=======
->>>>>>> Stashed changes
 
         self._config: Optional[Any] = None
 
@@ -272,21 +246,6 @@ class BaseConnector(BaseAbstractConnnector):
     def configure(self, data: bytes) -> None:
         """Parse configuration"""
 
-<<<<<<< Updated upstream
-    def _get_config(self, conf_data: bytes, cof_cls: type) -> type:
-        try:
-            js_config = self.parse_base_configuration(conf_data)
-            js_config["timestamp_shift"] = loads(
-                js_config.get("timestamp_shift", "{}").replace("'", '"')
-            )
-            if not js_config:
-                self._logger.error("Recieved empty config")
-                raise MalformedConfig("Recieved Malformed configuration JSON")
-
-            config = self._factory.load(js_config, cof_cls)
-        except (ValueError, TypeError, JSONDecodeError) as err:
-            self._logger.error(f"Cannot loads '{js_config}' due to the error '{err}'")
-=======
     def _before_configuration(self, data: bytes) -> dict:
         """Before configuration action"""
         try:
@@ -318,7 +277,6 @@ class BaseConnector(BaseAbstractConnnector):
             config = self._after_configuration(config)
             self._config_validation()
         except (ValueError, TypeError, JSONDecodeError, ConfigValidationError) as err:
->>>>>>> Stashed changes
             raise MalformedConfig from err
         else:
             return config
@@ -381,10 +339,7 @@ class BaseConnector(BaseAbstractConnnector):
         return None
 
     def standardize(self) -> None:
-<<<<<<< Updated upstream
-=======
         """Standardize meter data"""
->>>>>>> Stashed changes
         with elapsed_timer() as elapsed:
             self._logger.info("Start standardizing of fetched data.")
             if self._standardize_worker is None:
