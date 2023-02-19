@@ -42,7 +42,7 @@ class GapsDetectionWorker(BaseFetchWorker):
     __name__ = "Irisys Missed Hours Worker"
     __max_idle_run_count__ = 5
 
-    def __init__(   # pylint:disable=super-init-not-called
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -330,7 +330,7 @@ class FetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Irysis Standardization Worker."""
 
     __created_by__ = "Irysis Connector"

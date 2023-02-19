@@ -5,8 +5,10 @@ from json import JSONDecodeError, dumps, load
 from pathlib import Path
 from queue import Queue
 from typing import Optional
+
 from dataclass_factory import Factory
 from expiringdict import ExpiringDict
+
 from common import settings as CFG
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
@@ -16,7 +18,7 @@ from integration.willow.exceptions import MalformedConfig
 from integration.willow.workers import (
     FetchWorker,
     GapsDetectionWorker,
-    StandrdizeWorker,
+    StandardizeWorker,
 )
 
 
@@ -44,13 +46,13 @@ class WillowConnector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
 
@@ -69,7 +71,7 @@ class WillowConnector(BasePullConnector):
                 config=self._config,
             )
 
-            self._standardize_worker = StandrdizeWorker(
+            self._standardize_worker = StandardizeWorker(
                 raw_files=self._fetched_files_q,
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,

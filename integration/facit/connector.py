@@ -14,7 +14,7 @@ from common.logging import Logger
 from integration.base_integration import BasePullConnector
 from integration.facit.config import FacitCfg
 from integration.facit.exceptios import MalformedConfig
-from integration.facit.workers import FetchWorker, StandrdizeWorker
+from integration.facit.workers import FetchWorker, StandardizeWorker
 
 
 class Connector(BasePullConnector):
@@ -36,14 +36,14 @@ class Connector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     # TODO: Review ability to move this method in base class
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, FacitCfg)
@@ -62,7 +62,7 @@ class Connector(BasePullConnector):
                 config=self._config,
             )
 
-            self._standardize_worker = StandrdizeWorker(
+            self._standardize_worker = StandardizeWorker(
                 raw_files=self._fetched_files_q,
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,

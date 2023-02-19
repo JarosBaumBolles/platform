@@ -1,47 +1,37 @@
 """ Density Workers module"""
 
-import binascii
-import hashlib
-import hmac
 import time
-import urllib
-import urllib.parse
 import uuid
-from base64 import b64encode
+from abc import abstractmethod
 from collections import Counter
 from http import HTTPStatus
-from json import dumps, loads
-from math import floor
+from json import JSONDecodeError, dumps, loads
 from queue import Queue
-from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import requests
 from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
 from google.cloud.storage import Client
-from pandas import DataFrame
 from pendulum import DateTime
 
 import common.settings as CFG
-from common import settings as CFG
-from common.bucket_helpers import (
-    file_exists,
-    get_missed_standardized_files,
-    require_client,
-)
+from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
 from common.date_utils import format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
-from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.density.data_structture import DataFile, StandardizedFile
 from integration.density.exception import (
     EmptyDataInterruption,
+    EmptyRawData,
     EmptyResponse,
     LoadFromConnectorAPI,
 )
 
+RUN_GAPS_PARALLEL = True
+RUN_FETCH_PARALLEL = True
+RUN_STANDARDIZE_PARALLEL = True
 
 # TODO: @todo Potensial candidate to be in base class. The same code is in Openweather
 class GapsDetectionWorker(BaseFetchWorker):
@@ -52,7 +42,7 @@ class GapsDetectionWorker(BaseFetchWorker):
     __name__ = "Density Missed Hours Worker"
     __max_idle_run_count__ = 5
 
-    def __init__(
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -67,15 +57,20 @@ class GapsDetectionWorker(BaseFetchWorker):
             description=self.__description__, trace_id=self._trace_id
         )
 
-    def configure(self) -> None:
+    def configure(self, run_time: DateTime) -> None:
+        self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
     def missed_hours_consumer(
-        self, storage_client: Client, logs: Queue, worker_idx: str
+        self,
+        storage_client: Client,
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
+        """Get missed data points"""
         if self._meters_queue.empty():
             self._th_logger.warning("Meters queue is empty.")
             return None
@@ -95,12 +90,12 @@ class GapsDetectionWorker(BaseFetchWorker):
                 client=storage_client,
             )
             if mtr_msd_poll_hrs:
-                for hr in mtr_msd_poll_hrs:
+                for mtr_hr in mtr_msd_poll_hrs:
                     try:
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
                     except KeyError:
-                        self._missed_hours_cache[hr] = Queue()
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr] = Queue()
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
 
                 self._th_logger.info(
                     f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' "
@@ -112,9 +107,18 @@ class GapsDetectionWorker(BaseFetchWorker):
                 )
             self._meters_queue.task_done()
 
-    def run(self) -> None:
-        self.configure()
-        self._run_consumers((self.missed_hours_consumer, [require_client()]))
+    def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
+        self.configure(run_time)
+        self._run_consumers(
+            [(self.missed_hours_consumer, [require_client()])],
+            run_parallel=RUN_GAPS_PARALLEL,
+        )
+
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
 
 
 class FetchWorker(BaseFetchWorker):
@@ -129,6 +133,7 @@ class FetchWorker(BaseFetchWorker):
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
+    __request_timeout__ = 60
 
     def __init__(
         self,
@@ -201,6 +206,7 @@ class FetchWorker(BaseFetchWorker):
                     url,
                     params=params,
                     headers=headers,
+                    timeout=self.__request_timeout__,
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
@@ -228,9 +234,13 @@ class FetchWorker(BaseFetchWorker):
 
     # TODO: @todo THe same about miving to base class
     def fetch_consumer(
-        self, storage_client: Client, logs: Queue, worker_idx: str
+        self,
+        storage_client: Client,
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
-        if not len(self._missed_hours_queue):
+        """Fetch data"""
+        if not bool(len(self._missed_hours_queue)):
             self._th_logger.warning(
                 "Missed hours queue is empty. Maybe data up to date.",
             )
@@ -240,7 +250,7 @@ class FetchWorker(BaseFetchWorker):
         fetch_url = self.__fetch_url__.format(self._config.space_id)
 
         while True:
-            if not len(self._missed_hours_queue):
+            if not bool(len(self._missed_hours_queue)):
                 if empty_run_count == self.__max_idle_run_count__:
                     break
                 empty_run_count += 1
@@ -297,23 +307,31 @@ class FetchWorker(BaseFetchWorker):
                     self._add_to_update(file_info, self._fetch_update_file_buffer)
 
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
         self._run_consumers(
             [
                 (self.fetch_consumer, [require_client()]),
                 (self.save_fetched_files_worker, []),
-            ]
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
         self._run_consumers(
             [
                 (self.save_fetch_status_worker, []),
-            ]
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self._logger.info("Fetching has been done.")
 
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
 
-class StandrdizeWorker(BaseStandardizeWorker):
+
+class StandardizeWorker(BaseStandardizeWorker):
     """Density Standardization Worker."""
 
     __created_by__ = "Density Connector"
@@ -395,13 +413,18 @@ class StandrdizeWorker(BaseStandardizeWorker):
 
     # TODO: @todo Possible candite to be in base class. Or boiler plate code
     def run(self, run_time: DateTime) -> None:
+        """Run poll entrypoint"""
         self.configure(run_time)
 
         self._run_consumers(
             [
                 (self.run_standardize_worker, []),
                 (self.save_standardized_files_worker, []),
-            ]
+            ],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
         self.finalize_standardize_update_status()
-        self._run_consumers([(self.save_standardize_status_worker, [])])
+        self._run_consumers(
+            [(self.save_standardize_status_worker, [])],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
+        )

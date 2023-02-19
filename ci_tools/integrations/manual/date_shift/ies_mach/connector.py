@@ -1,22 +1,19 @@
 """IES MACH Date Shift integration."""
 import base64
 import uuid
-from collections import Counter
-from json import JSONDecodeError, dumps, load, loads
+from json import dumps, load
 from queue import Queue
 from typing import Optional
-
-from dataclass_factory import Factory
-from expiringdict import ExpiringDict
-
 from ci_tools.integrations.manual.date_shift.base.workers import (
     FetchWorker,
-    StandrdizeWorker,
+    GapsDetectionWorker,
+    StandardizeWorker,
 )
 from common import settings as CFG
+from common.date_utils import parse
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from integration.base_integration import BasePullConnector, MalformedConfig
+from integration.base_integration import BasePullConnector
 from integration.ies_mach.config import IesMachCfg
 
 
@@ -29,92 +26,33 @@ class Connector(BasePullConnector):
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
-        self._factory = Factory()
-
         self._config: Optional[IesMachCfg] = None
-        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
-
-        self._fetched_files_q: Queue = Queue()
-        self._fetch_update_q: Queue = Queue()
+        self._gaps_worker: Optional[GapsDetectionWorker] = None
         self._fetch_worker: Optional[FetchWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
+        # TODO: Should be removed  after Coned moving to the new approach
+        # and final refactoring
         self._standardized_files: Queue = Queue()
-        self._standardized_update_files: Queue = Queue()
-        self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            try:
-                js_config = self.parse_base_configuration(conf_data)
-                if not js_config:
-                    raise MalformedConfig("Recieved Malformed configuration JSON")
-                self._config = self._factory.load(js_config, IesMachCfg)
+            self._config = self._get_config(conf_data, IesMachCfg)
 
-                self._config.timestamp_shift = loads(
-                    self._config.timestamp_shift.replace("'", '"')
-                )
-            except (ValueError, TypeError, JSONDecodeError) as err:
-                raise MalformedConfig from err
+            self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
 
-            self._fetch_worker = FetchWorker(
-                missed_hours=self._missed_hours,
-                fetched_files=self._fetched_files_q,
-                fetch_update=self._fetch_update_q,
-                config=self._config,
-            )
-
-            self._standardize_worker = StandrdizeWorker(
-                raw_files=self._fetched_files_q,
-                standardized_files=self._standardized_files,
-                standardize_update=self._standardized_update_files,
-                config=self._config,
-            )
-            self._logger.debug(
-                "Loaded configuration.",
-                extra={
-                    "labels": {
-                        "elapsed_teime": elapsed(),
-                    }
-                },
-            )
-
-    def fetch(self) -> None:
-        with elapsed_timer() as ellapsed:
-            self._logger.info("Fetching data.")
-            self._fetch_data()
-            self._logger.debug(
-                "Fetched missed hours.", extra={"labels": {"elapsed_time": ellapsed()}}
-            )
-
-    def _fetch_data(self) -> None:
-        """Integration Fetch logic"""
-        self._logger.info(f"Fetching `{self.__name__}` data")
-
-        if self._fetch_worker is None:
-            self._logger.error("The 'configure' method must be run before. Complete.")
-        else:
-            self._fetch_worker.run(self._run_time)
-
-    def standardize(self) -> None:
-        with elapsed_timer() as elapsed:
-            self._logger.info("Start standardizing of fetched data.")
-            if self._standardize_worker is None:
-                self._logger.error(
-                    "The 'configure' method must be run before. Complete."
-                )
-                return None
-            self._standardize_worker.run(self._run_time)
-
-            self._logger.info(
-                "Completed data standardization.",
-                extra={"labels": {"elapsed_time": elapsed()}},
-            )
-        return None
+        self._logger.debug(
+            "Loaded configuration.",
+            extra={
+                "labels": {
+                    "elapsed_teime": elapsed(),
+                }
+            },
+        )
 
     def run(self):
-        super().run()
+        self._run_time = parse(tz_info=self.env_tz_info)
         self.fetch()
         self.standardize()
 

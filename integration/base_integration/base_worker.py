@@ -11,6 +11,7 @@ from queue import Queue
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
 from google.cloud.exceptions import GoogleCloudError
 from google.cloud.storage import Client
@@ -68,6 +69,9 @@ class BaseWorker:  # pylint: disable=too-many-instance-attributes
         self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
+        )
+        self._factory = Factory(
+            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
 
     def process_consumer_results(self, futures, logs) -> None:
@@ -270,8 +274,8 @@ class BaseWorker:  # pylint: disable=too-many-instance-attributes
     ) -> DateTime:
         """Adjust meter time in accordance with the given configuration"""
         mtr_dt = truncate(date, level=truncate_lvl) if truncate_lvl else date
-        time_shift = self._config.timestamp_shift.get("shift", None).strip().lower()
-        kwargs = self._config.timestamp_shift.get("shift_hours", {})
+        time_shift = self._config.timestamp_shift.shift.strip().lower()
+        kwargs = self._factory.dump(self._config.timestamp_shift.shift_hours)
 
         if kwargs and any(kwargs.values()):
             if time_shift == "add":
@@ -450,6 +454,9 @@ class BaseStandardizeWorker(BaseWorker):
         self._st_update_counter = Counter()
         self._st_base_update_file_name: Optional[str] = None
         self._fetch_update_file_buffer: Optional[ExpiringDict] = None
+        self._factory = Factory(
+            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
+        )
 
     def run_standardize_worker(
         self,

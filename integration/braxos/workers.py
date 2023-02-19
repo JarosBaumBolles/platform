@@ -35,7 +35,7 @@ class GapsDetectionWorker(BaseFetchWorker):
     __name__ = "Braxos Missed Hours Worker"
     __max_idle_run_count__ = 5
 
-    def __init__(   # pylint:disable=super-init-not-called
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -186,7 +186,7 @@ class FetchWorker(BaseFetchWorker):
             )
         return data
 
-    def fetch_consumer( # pylint:disable=too-many-locals
+    def fetch_consumer(  # pylint:disable=too-many-locals
         self,
         storage_client: Client,
         logs: Queue,
@@ -292,7 +292,7 @@ class FetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Density Standardization Worker."""
 
     __created_by__ = "Density Connector"

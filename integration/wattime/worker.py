@@ -1,7 +1,8 @@
 """ WatTime Workers module"""
 import time
+import uuid
 from abc import abstractmethod
-from collections import Counter
+from collections import Counter, defaultdict
 from http import HTTPStatus
 from json import dumps, loads
 from queue import Queue
@@ -9,39 +10,43 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from pendulum import DateTime, Period
+from dataclass_factory import Factory, Schema
+from expiringdict import ExpiringDict
+from google.cloud.storage import Client
+from pendulum import DateTime
 from requests.auth import HTTPBasicAuth
 
 from common import settings as CFG
+from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
 from common.date_utils import format_date, parse, truncate
+from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import (
     BaseFetchWorker,
     BaseStandardizeWorker,
     EmptyRawFile,
 )
 from integration.wattime.data import DataFile, StandardizedFile
-from integration.wattime.exceptions import AuthtorizeException, EmptyResponse
-from expiringdict import ExpiringDict
-from google.cloud.storage import Client
-import uuid
-from common.logging import Logger, ThreadPoolExecutorLogger
-from common.bucket_helpers import require_client
-from common.bucket_helpers import get_missed_standardized_files
-from dataclass_factory import Factory, Schema
-from integration.wattime.exceptions import LoadFromWattime
-from collections import defaultdict
+from integration.wattime.exceptions import (
+    AuthtorizeException,
+    EmptyResponse,
+    LoadFromWattime,
+)
 
+RUN_GAPS_PARALLEL = True
+RUN_FETCH_PARALLEL = True
+RUN_STANDARDIZE_PARALLEL = True
 
 
 class MarginalEmGapsDetectionWorker(BaseFetchWorker):
     """Wattime Marginal get missed hours worker functionality"""
+
     __created_by__ = "Wattime Marginal Missed Hours Worker"
     __description__ = "Wattime Marginal Integration"
     __name__ = "Wattime Marginal Missed Hours Worker"
     __max_idle_run_count__ = 5
-    
-    def __init__(
+
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -50,32 +55,29 @@ class MarginalEmGapsDetectionWorker(BaseFetchWorker):
         self._config = config
         self._meters_queue = Queue()
         self._trace_id: str = uuid.uuid4()
-        self._logger = Logger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
+        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
+            description=self.__description__, trace_id=self._trace_id
+        )
 
-    def configure(self) -> None:
+    def configure(self, run_time: DateTime) -> None:
+        self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
         for mtr_cfg in self._config.meters:
-            self._meters_queue.put(mtr_cfg)        
-
+            self._meters_queue.put(mtr_cfg)
 
     def missed_hours_consumer(
         self,
         storage_client: Client,
-        logs: Queue,
-        worker_idx: str
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
+        """Get missed data points."""
         if self._meters_queue.empty():
             self._th_logger.warning("Meters queue is empty.")
-            return None    
-        empty_run_count = 0        
+            return None
+        empty_run_count = 0
         while True:
             if self._meters_queue.empty():
                 if empty_run_count == self.__max_idle_run_count__:
@@ -88,34 +90,37 @@ class MarginalEmGapsDetectionWorker(BaseFetchWorker):
                 bucket_name=mtr_cfg.standardized.bucket,
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
-                client=storage_client
-            )       
+                client=storage_client,
+            )
             if mtr_msd_poll_hrs:
                 # missed_hours.put((mtr_cfg, mtr_msd_poll_hrs))
-                for hr in mtr_msd_poll_hrs:
+                for mtr_hr in mtr_msd_poll_hrs:
                     try:
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
                     except KeyError:
-                        self._missed_hours_cache[hr] = Queue()
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr] = Queue()
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
 
                 self._th_logger.info(
-                    f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' "
-                    "meter."
-                )            
+                    f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' " "meter."
+                )
             else:
                 self._th_logger.info(f"Meter {mtr_cfg.meter_name} is up to date.")
-            self._meters_queue.task_done()        
+            self._meters_queue.task_done()
 
-
-    def run(self) -> None:
-        self.configure()
+    def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
+        self.configure(run_time)
         self._run_consumers(
-            (
-                self.missed_hours_consumer,
-                [require_client()]
-            )
+            [(self.missed_hours_consumer, [require_client()])],
+            run_parallel=RUN_GAPS_PARALLEL,
         )
+
+    # TODO: Shoud be removed after final refactoring
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
+
 
 class WatTimeBaseFetchWorker(BaseFetchWorker):
     """Wattime base worker functionality"""
@@ -156,12 +161,7 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
                 time.sleep(delay)
         return token
 
-    def _request_data(
-        self, 
-        url: str, 
-        params: dict, 
-        token: Optional[str]
-    ) -> Tuple:
+    def _request_data(self, url: str, params: dict, token: Optional[str]) -> Tuple:
         retry_count, delay = 0, 0.5
         auth_errors = (
             HTTPStatus.UNAUTHORIZED.value,
@@ -194,7 +194,7 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
                     f"Response status code is {result.status_code}. "
                     f"Response message is {result.text}. Response parameters: - "
                     f"{params}; "
-                )            
+                )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
                     break
@@ -207,22 +207,19 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
                 retry_count += 1
                 delay = retry_count
                 time.sleep(delay)
-        
+
         if not data or result.status_code != HTTPStatus.OK.value:
             raise EmptyResponse(
                 "Cannot run request corectly"
                 f"Response status code is {result.status_code}. "
                 f"Response message is {result.text}. Response parameters: - "
-                f"{params}; "          
+                f"{params}; "
             )
-            
+
         return data, token
 
     def _load_from_file(
-        self, 
-        filename: str, 
-        storage_client: Client, 
-        logs: Queue
+        self, filename: str, storage_client: Client, logs: Queue
     ) -> Optional[Dict]:
         fl_exists = self._is_file_exists(
             client=storage_client,
@@ -246,7 +243,7 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
             path=self._config.extra.raw.path,
             filename=filename,
             logs=logs,
-            client=storage_client
+            client=storage_client,
         )
 
         if not data:
@@ -262,7 +259,7 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class WatTimeBaseStandrdizeWorker(BaseStandardizeWorker):
+class WatTimeBaseStandardizeWorker(BaseStandardizeWorker):
     """Wattime base standardize worker functionality"""
 
     def _standardize(self, raw_file_obj: DataFile) -> List[DataFile]:
@@ -279,7 +276,7 @@ class WatTimeBaseStandrdizeWorker(BaseStandardizeWorker):
                 stndrdz_func = getattr(self, stndrdz_mthd_nm, "")
                 if not callable(stndrdz_func):
                     #  TODO: Add loging here
-                    continue  
+                    continue
 
                 try:
                     meter = stndrdz_func(json_data, mtr_hr, mtr_cfg)
@@ -287,8 +284,7 @@ class WatTimeBaseStandrdizeWorker(BaseStandardizeWorker):
                         standardized_files.append(
                             StandardizedFile(
                                 file_name=format_date(
-                                    mtr_hr, 
-                                    CFG.PROCESSING_DATE_FORMAT
+                                    mtr_hr, CFG.PROCESSING_DATE_FORMAT
                                 ),
                                 bucket=mtr_cfg.standardized.bucket,
                                 path=mtr_cfg.standardized.path,
@@ -296,27 +292,33 @@ class WatTimeBaseStandrdizeWorker(BaseStandardizeWorker):
                                 body=meter.as_str(),
                                 cfg=mtr_cfg,
                             )
-                        )                     
+                        )
                 except EmptyRawFile:
-                    raise EmptyRawFile( # pylint:disable=raise-missing-from
+                    raise EmptyRawFile(  # pylint:disable=raise-missing-from
                         f"Detected empty body in the RawFile 'gs://{mtr_cfg.bucket}/'"
                         f"{mtr_cfg.path}/{raw_file_obj.file_name}"
                     )
-                raw_file_obj.meters.task_done()    
+                raw_file_obj.meters.task_done()
             raw_file_obj.timestamps.task_done()
-        return standardized_files  
+        return standardized_files
 
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
 
         self._run_consumers(
             [
                 (self.run_standardize_worker, []),
-                (self.save_standardized_files_worker, [])
-            ]
+                (self.save_standardized_files_worker, []),
+            ],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
         self.finalize_standardize_update_status()
-        self._run_consumers([(self.save_standardize_status_worker, [])])
+        self._run_consumers(
+            [(self.save_standardize_status_worker, [])],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
+        )
+
 
 class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
     """Wattime Marginal Emmision Fetch Worker"""
@@ -330,6 +332,7 @@ class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
+
     def __init__(
         self,
         missed_hours: ExpiringDict,
@@ -350,48 +353,45 @@ class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
 
         self._factory = Factory(
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
-        )  
+        )
 
     def fetch_consumer(
-        self, 
+        self,
         storage_client: Client,
-        logs: Queue, 
-        worker_idx: str
-    ) -> None:  
-        if not len(self._missed_hours_queue):
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
+    ) -> None:
+        """Fetch missed data points"""
+        if not bool(len(self._missed_hours_queue)):
             self._th_logger.warning(
                 "Missed hours queue is empty. Maybe data up to date."
             )
-            return None            
+            return None
         empty_run_count = 0
         possible_errors = (
-            AuthtorizeException, 
-            EmptyResponse, 
-            requests.exceptions.JSONDecodeError
-        ) 
+            AuthtorizeException,
+            EmptyResponse,
+            requests.exceptions.JSONDecodeError,
+        )
         try:
             token = self.authorize()
-        except AuthtorizeException:
-            self._th_logger.error(
-                f"Cannot fetch data due to the error '{err}'. Exit."
-            )            
+        except AuthtorizeException as err:
+            self._th_logger.error(f"Cannot fetch data due to the error '{err}'. Exit.")
             return None
 
         while True:
-            if not len(self._missed_hours_queue):
+            if not bool(len(self._missed_hours_queue)):
                 if empty_run_count == self.__max_idle_run_count__:
                     break
                 empty_run_count += 1
             else:
                 mtr_hr, mtr_cfgs = self._missed_hours_queue.popitem()
                 filename = format_date(mtr_hr, CFG.PROCESSING_DATE_FORMAT)
-                add_to_update = False, 
+                add_to_update = (False,)
                 try:
                     try:
                         data = self._load_from_file(
-                            filename=filename, 
-                            storage_client=storage_client, 
-                            logs=logs
+                            filename=filename, storage_client=storage_client, logs=logs
                         )
                         add_to_update = False
                     except LoadFromWattime as err:
@@ -399,16 +399,13 @@ class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
                             f"Canot load the local file due to the reason '{err}'"
                             " Loading from th eWatTime API"
                         )
-                        dt = format_date(
-                            mtr_hr, 
-                            CFG.PROCESSING_DATE_FORMAT
-                        )
+                        mtr_dt = format_date(mtr_hr, CFG.PROCESSING_DATE_FORMAT)
                         data, token = self._request_data(
                             url=self.__fetch_url__,
                             params={
                                 "ba": self._config.grid_regions_name,
-                                "starttime": dt,
-                                "endtime": dt,
+                                "starttime": mtr_dt,
+                                "endtime": mtr_dt,
                             },
                             token=token,
                         )
@@ -418,16 +415,16 @@ class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
                         f"Cannot fetch data for '{mtr_hr}' due to the error '{err}'."
                         " Skipping."
                     )
-                    continue 
+                    continue
 
                 file_info = DataFile(
                     file_name=filename,
                     bucket=self._config.extra.raw.bucket,
                     path=self._config.extra.raw.path,
                     body=dumps(data, indent=4, sort_keys=True),
-                    meters=mtr_cfgs,                    
-                )    
-                file_info.timestamps.put(mtr_hr)            
+                    meters=mtr_cfgs,
+                )
+                file_info.timestamps.put(mtr_hr)
 
                 self._fetched_files_queue.put(file_info)
                 self._shadow_fetched_files_queue.put(file_info)
@@ -435,31 +432,39 @@ class MarginalEmFetchWorker(WatTimeBaseFetchWorker):
                     self._add_to_update(file_info, self._fetch_update_file_buffer)
 
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
         self._run_consumers(
             [
-                (
-                    self.fetch_consumer, 
-                    [require_client()]
-                ),
-                (self.save_fetched_files_worker, [])
-            ]
+                (self.fetch_consumer, [require_client()]),
+                (self.save_fetched_files_worker, []),
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
-        self._run_consumers([(self.save_fetch_status_worker, []),])
+        self._run_consumers(
+            [
+                (self.save_fetch_status_worker, []),
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
+        )
         self._logger.info("Fetching has been done.")
 
-class MarginalEmStandrdizeWorker(WatTimeBaseStandrdizeWorker):
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
+
+
+class MarginalEmStandardizeWorker(WatTimeBaseStandardizeWorker):
     """Wattime Standardization Worker."""
+
     __created_by__ = "Wattime Marginal Emissions Connector"
     __description__ = "Wattime Integration"
     __name__ = "Wattime Marginal Emissions Connector "
 
     def _standardize_marginal_grid_emissions(
-        self, 
-        data: Dict, 
-        mtr_date: DateTime, 
-        mtr_cfg: Any
+        self, data: Dict, mtr_date: DateTime, mtr_cfg: Any
     ) -> Meter:
         """Standardize Marginal Grid Emissions value"""
 
@@ -473,17 +478,17 @@ class MarginalEmStandrdizeWorker(WatTimeBaseStandrdizeWorker):
 
         return self._standardize_generic(data, mtr_cfg, _getter)
 
-    
 
 class AverageEmGapsDetectionWorker(BaseFetchWorker):
     """Openweather get missed hours worker functionality"""
+
     __created_by__ = "OpenWeather Missed Hours Worker"
     __description__ = "OpenWeather Integration"
     __name__ = "OpenWeather Missed Hours Worker"
     __max_idle_run_count__ = 5
     __default_delay_hours__ = 12
-    
-    def __init__(
+
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -492,31 +497,29 @@ class AverageEmGapsDetectionWorker(BaseFetchWorker):
         self._config = config
         self._meters_queue = Queue()
         self._trace_id: str = uuid.uuid4()
-        self._logger = Logger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
+        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
-            description=self.__description__, 
-            trace_id=self._trace_id
-        )        
+            description=self.__description__, trace_id=self._trace_id
+        )
 
-    def configure(self) -> None:
+    def configure(self, run_time: DateTime) -> None:
+        self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
         for mtr_cfg in self._config.meters:
-            self._meters_queue.put(mtr_cfg)      
+            self._meters_queue.put(mtr_cfg)
 
     def missed_hours_consumer(
         self,
         storage_client: Client,
-        logs: Queue,
-        worker_idx: str
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
+        """Get missed integration points"""
         if self._meters_queue.empty():
             self._th_logger.warning("Meters queue is empty.")
-            return None    
-        empty_run_count = 0        
+            return None
+        empty_run_count = 0
         while True:
             if self._meters_queue.empty():
                 if empty_run_count == self.__max_idle_run_count__:
@@ -525,14 +528,14 @@ class AverageEmGapsDetectionWorker(BaseFetchWorker):
                 continue
 
             mtr_cfg = self._meters_queue.get()
-            mtr_msd_poll_hrs = sorted (
+            mtr_msd_poll_hrs = sorted(
                 get_missed_standardized_files(
                     bucket_name=mtr_cfg.standardized.bucket,
                     bucket_path=mtr_cfg.standardized.path,
                     range_hours=self._config.gap_regeneration_window,
-                    client=storage_client
+                    client=storage_client,
                 )
-            )     
+            )
             if not mtr_msd_poll_hrs:
                 self._th_logger.info(f"Meter {mtr_cfg.meter_name} is up to date.")
                 continue
@@ -544,37 +547,38 @@ class AverageEmGapsDetectionWorker(BaseFetchWorker):
                     f"minimal endpoint delay {self.__default_delay_hours__}"
                     f" hours. Skipping."
                 )
-                continue            
-
+                continue
 
             # Group range by month to make one wattime call with month range maximum
             missed_hrs_index = defaultdict(list)
             for hour in mtr_msd_poll_hrs:
                 missed_hrs_index[hour.month].append(hour)
 
-            for index, hours in missed_hrs_index.items():
+            for _, hours in missed_hrs_index.items():
                 if len(hours) == 1:
-                    key = tuple(hour[0], hours[0].add(hours=1))
+                    key = tuple(hours[0], hours[0].add(hours=1))
                 else:
                     key = tuple(sorted(hours))
-            
+
                 self._missed_hours_cache.setdefault(key, Queue())
                 self._missed_hours_cache[key].put(mtr_cfg)
 
             self._th_logger.info(
                 f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' meter.",
-            )            
-                
+            )
+
             self._meters_queue.task_done()
 
-    def run(self) -> None:
-        self.configure()
-        self._run_consumers(
-            (
-                self.missed_hours_consumer,
-                [require_client()]
-            )
-        )                  
+    def run(self, run_time: DateTime) -> None:
+        """Run loop Entrypoint"""
+        self.configure(run_time)
+        self._run_consumers((self.missed_hours_consumer, [require_client()]))
+
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
+
 
 class AverageEmFetchWorker(WatTimeBaseFetchWorker):
     """Wattime Marginal Emmision Fetch Worker
@@ -615,6 +619,7 @@ class AverageEmFetchWorker(WatTimeBaseFetchWorker):
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
+
     def __init__(
         self,
         missed_hours: ExpiringDict,
@@ -635,7 +640,7 @@ class AverageEmFetchWorker(WatTimeBaseFetchWorker):
 
         self._factory = Factory(
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
-        )  
+        )
         self._fetch_counter = Counter()
         self._fetch_lock: Lock = Lock()
 
@@ -644,49 +649,45 @@ class AverageEmFetchWorker(WatTimeBaseFetchWorker):
     def configure(self, run_time: DateTime) -> None:
         super().configure(run_time=run_time)
         self._fetch_counter.clear()
-        self._base_filename = format_date(
-            self._run_time,
-            CFG.PROCESSING_DATE_FORMAT
-        )
+        self._base_filename = format_date(self._run_time, CFG.PROCESSING_DATE_FORMAT)
 
-    def fetch_consumer(self, logs: Queue, worker_idx: str) -> None:  
-        if not len(self._missed_hours_queue):
+    def fetch_consumer(
+        self,
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
+    ) -> None:
+        """Fetch data for missing points"""
+        if not bool(len(self._missed_hours_queue)):
             self._th_logger.warning(
                 "Missed hours queue is empty. Maybe data up to date."
             )
-            return None            
+            return None
         empty_run_count = 0
         possible_errors = (
-            AuthtorizeException, 
-            EmptyResponse, 
-            requests.exceptions.JSONDecodeError
-        ) 
+            AuthtorizeException,
+            EmptyResponse,
+            requests.exceptions.JSONDecodeError,
+        )
         try:
             token = self.authorize()
-        except AuthtorizeException:
-            self._th_logger.error(
-                f"Cannot fetch data due to the error '{err}'. Exit."
-            )            
+        except AuthtorizeException as err:
+            self._th_logger.error(f"Cannot fetch data due to the error '{err}'. Exit.")
             return None
         while True:
-            if not len(self._missed_hours_queue):
+            if not bool(len(self._missed_hours_queue)):
                 if empty_run_count == self.__max_idle_run_count__:
                     break
                 empty_run_count += 1
             else:
                 mtr_hours, mtr_cfgs = self._missed_hours_queue.popitem()
                 mtr_cfg_list = []
-                # TODO: Should Be redesigned to use threadsafety cached approach                
+                # TODO: Should Be redesigned to use threadsafety cached approach
                 while not mtr_cfgs.empty():
                     mtr_cfg_list.append(mtr_cfgs.get())
                     mtr_cfgs.task_done()
                 try:
-                    start_date = format_date(
-                        mtr_hours[0], CFG.PROCESSING_DATE_FORMAT
-                    )
-                    end_date = format_date(
-                        mtr_hours[-1], CFG.PROCESSING_DATE_FORMAT
-                    )  
+                    start_date = format_date(mtr_hours[0], CFG.PROCESSING_DATE_FORMAT)
+                    end_date = format_date(mtr_hours[-1], CFG.PROCESSING_DATE_FORMAT)
 
                     data, token = self._request_data(
                         url=self.__fetch_url__,
@@ -697,19 +698,16 @@ class AverageEmFetchWorker(WatTimeBaseFetchWorker):
                         },
                         token=token,
                     )
-                    add_to_update = True
+
                 except possible_errors as err:
                     self._th_logger.error(
-                        f"Cannot fetch data for '{mtr_hr}' due to the error '{err}'."
-                        " Skipping."
+                        f"Cannot fetch data from  '{start_date}'  to '{end_date}' due "
+                        f"to the error '{err}'. Skipping."
                     )
-                    continue   
+                    continue
 
                 for point in data:
-                    point_data = truncate(
-                        parse(point.get("point_time")), 
-                        level="hour"
-                    )
+                    point_data = truncate(parse(point.get("point_time")), level="hour")
                     if point_data not in mtr_hours:
                         self._th_logger.error(
                             f"Found excess date in '{point_data}' hour in response."
@@ -736,31 +734,38 @@ class AverageEmFetchWorker(WatTimeBaseFetchWorker):
                     self._fetched_files_queue.put(file_info)
                     self._shadow_fetched_files_queue.put(file_info)
                     self._add_to_update(file_info, self._fetch_update_file_buffer)
-                                                         
+
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
         self._run_consumers(
-            [
-                (self.fetch_consumer, []),
-                (self.save_fetched_files_worker, [])
-            ]
+            [(self.fetch_consumer, []), (self.save_fetched_files_worker, [])],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
-        self._run_consumers([(self.save_fetch_status_worker, []),])
+        self._run_consumers(
+            [
+                (self.save_fetch_status_worker, []),
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
+        )
         self._logger.info("Fetching has been done.")
 
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
 
-class AverageEmStandrdizeWorker(WatTimeBaseStandrdizeWorker):
+
+class AverageEmStandardizeWorker(WatTimeBaseStandardizeWorker):
     """Wattime Standardization Worker."""
+
     __created_by__ = "Wattime Marginal Emissions Connector"
     __description__ = "Wattime Integration"
     __name__ = "Wattime Marginal Emissions Connector "
 
     def _standardize_average_grid_emissions(
-        self, 
-        data: Dict, 
-        mtr_date: DateTime, 
-        mtr_cfg: Any
+        self, data: Dict, mtr_date: DateTime, mtr_cfg: Any
     ) -> Meter:
         """Standardize Marginal Grid Emissions value"""
 
