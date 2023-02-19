@@ -18,7 +18,7 @@ from integration.openweather.exceptions import MalformedConfig
 from integration.openweather.workers import (
     FetchWorker,
     GapsDetectionWorker,
-    StandrdizeWorker,
+    StandardizeWorker,
 )
 
 
@@ -51,7 +51,7 @@ class OpenWeatherConnector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     # TODO: Review ability to move this method in base class
     def configure(self, conf_data: bytes) -> None:
@@ -77,7 +77,7 @@ class OpenWeatherConnector(BasePullConnector):
                 config=self._config,
             )
 
-            self._standardize_worker = StandrdizeWorker(
+            self._standardize_worker = StandardizeWorker(
                 raw_files=self._fetched_files_q,
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,

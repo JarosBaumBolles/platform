@@ -20,7 +20,7 @@ from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration import BasePushConnector
 from integration.sourceone.config import SourceoneCfg
 from integration.sourceone.data_structures import FetchPayload
-from integration.sourceone.worker import FetchWorker, StandrdizeWorker
+from integration.sourceone.worker import FetchWorker, StandardizeWorker
 
 
 class MalformedConfig(Exception):
@@ -53,7 +53,7 @@ class SourceOneBaseConnector(BasePushConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def fetch(self) -> None:  # pylint:disable=arguments-differ
         with elapsed_timer() as ellapsed:
@@ -194,7 +194,7 @@ class SourceOneConnector(SourceOneBaseConnector):
             config=self._config,
         )
 
-        self._standardize_worker = StandrdizeWorker(
+        self._standardize_worker = StandardizeWorker(
             raw_files=self._fetched_files_q,
             standardized_files=self._standardized_files,
             standardize_update=self._standardized_update_files,

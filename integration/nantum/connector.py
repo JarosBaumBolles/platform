@@ -1,30 +1,23 @@
 """Nantum integration"""
 import base64
 import uuid
-from abc import abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from json import JSONDecodeError, dumps, load, loads
 from queue import Queue
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional
 
 from dataclass_factory import Factory
-from pendulum import DateTime
-
+from expiringdict import ExpiringDict
 from common import settings as CFG
-from common.bucket_helpers import get_missed_standardized_files
-from common.date_utils import format_date, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration import BasePullConnector, MalformedConfig
 from integration.nantum.config import NantumCfg
-from integration.nantum.data_structures import FetchPayload
 from integration.nantum.worker import (
-    FetchWorker, 
-    StandrdizeWorker,
-    GapsDetectionWorker
+    FetchWorker,
+    GapsDetectionWorker,
+    StandardizeWorker,
 )
-from expiringdict import ExpiringDict
 
 
 class NantumBaseConnector(BasePullConnector):
@@ -33,7 +26,6 @@ class NantumBaseConnector(BasePullConnector):
     __created_by__ = "Nantum Connector"
     __description__ = "Nantum Integration"
     __name__ = "Nantum"
-
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
@@ -45,7 +37,7 @@ class NantumBaseConnector(BasePullConnector):
                 self._config = self._factory.load(js_config, NantumCfg)
 
                 self._config.timestamp_shift = loads(
-                    self._config.timestamp_shift.replace("'", "\"")
+                    self._config.timestamp_shift.replace("'", '"')
                 )
             except (ValueError, TypeError, JSONDecodeError) as err:
                 raise MalformedConfig from err
@@ -64,7 +56,8 @@ class NantumBaseConnector(BasePullConnector):
         self.get_missed_hours()
         self.fetch()
         self.standardize()
-        
+
+
 class NantumConnector(NantumBaseConnector):
     """Natum Connector"""
 
@@ -77,26 +70,22 @@ class NantumConnector(NantumBaseConnector):
         self._factory = Factory()
 
         self._config: Optional[NantumCfg] = None
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )     
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
-        self._fetch_worker: Optional[FetchWorker] = None 
+        self._fetch_worker: Optional[FetchWorker] = None
 
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None                   
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         super().configure(conf_data)
 
         self._gaps_worker = GapsDetectionWorker(
-            missed_hours_cache=self._missed_hours,
-            config=self._config
+            missed_hours_cache=self._missed_hours, config=self._config
         )
 
         self._fetch_worker = FetchWorker(
@@ -106,7 +95,7 @@ class NantumConnector(NantumBaseConnector):
             config=self._config,
         )
 
-        self._standardize_worker = StandrdizeWorker(
+        self._standardize_worker = StandardizeWorker(
             raw_files=self._fetched_files_q,
             standardized_files=self._standardized_files,
             standardize_update=self._standardized_update_files,
@@ -124,14 +113,14 @@ class NantumConnector(NantumBaseConnector):
         # and build index (relation) between missed hour and related meters
 
         # In accordance with Nantum documentation Nantum Metric Data API -
-        # This endpoint returns an array of the sensors that collect data for 
+        # This endpoint returns an array of the sensors that collect data for
         # the metric.
-        # In addition to the general information associated with a sensor, 
-        # the sensor’s JSON object also returns areadingsfield that containsa 
-        # timeseries, which represents the data gathered by the sensor on a 
-        # particular date. This timeseries is an array consisting of aseries 
-        # of readings, each with atimeand avalue.For example, the following 
-        # field of thesensor object returned by the endpoint represents a 
+        # In addition to the general information associated with a sensor,
+        # the sensor’s JSON object also returns areadingsfield that containsa
+        # timeseries, which represents the data gathered by the sensor on a
+        # particular date. This timeseries is an array consisting of aseries
+        # of readings, each with atimeand avalue.For example, the following
+        # field of thesensor object returned by the endpoint represents a
         # timeseries for the sensor
 
         # Basing on the above to retrive data with minimum Nantum APi calls
@@ -176,12 +165,9 @@ class NantumConnector(NantumBaseConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
-            return None
-
-        self._fetch_worker.run(self._run_time)    
+            self._logger.error("The 'configure' method must be run before. Complete.")
+        else:
+            self._fetch_worker.run(self._run_time)
 
     def standardize(self) -> None:
         with elapsed_timer() as elapsed:
@@ -199,11 +185,13 @@ class NantumConnector(NantumBaseConnector):
             )
         return None
 
+
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""
     main_logger = Logger(
         name="NANTUM INTEGRATION",
-        level="DEBUG",description="NANTUM INTEGRATION",
+        level="DEBUG",
+        description="NANTUM INTEGRATION",
         trace_id=uuid.uuid4(),
     )
     with elapsed_timer() as elapsed:

@@ -29,6 +29,10 @@ from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.openweather.data_structures import DataFile, StandardizedFile
 
+RUN_GAPS_PARALLEL = True
+RUN_FETCH_PARALLEL = True
+RUN_STANDARDIZE_PARALLEL = True
+
 
 class GapsDetectionWorker(BaseFetchWorker):
     """Openweather get missed hours worker functionality"""
@@ -38,7 +42,7 @@ class GapsDetectionWorker(BaseFetchWorker):
     __name__ = "OpenWeather Missed Hours Worker"
     __max_idle_run_count__ = 5
 
-    def __init__(
+    def __init__(   # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -61,8 +65,12 @@ class GapsDetectionWorker(BaseFetchWorker):
             self._meters_queue.put(mtr_cfg)
 
     def missed_hours_consumer(
-        self, storage_client: Client, logs: Queue, worker_idx: str
+        self,
+        storage_client: Client,
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
     ) -> None:
+        """Get missed data points"""
         if self._meters_queue.empty():
             self._th_logger.warning("Meters queue is empty.")
             return None
@@ -82,13 +90,12 @@ class GapsDetectionWorker(BaseFetchWorker):
                 client=storage_client,
             )
             if mtr_msd_poll_hrs:
-                # missed_hours.put((mtr_cfg, mtr_msd_poll_hrs))
-                for hr in mtr_msd_poll_hrs:
+                for mtr_hr in mtr_msd_poll_hrs:
                     try:
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
                     except KeyError:
-                        self._missed_hours_cache[hr] = Queue()
-                        self._missed_hours_cache[hr].put(mtr_cfg)
+                        self._missed_hours_cache[mtr_hr] = Queue()
+                        self._missed_hours_cache[mtr_hr].put(mtr_cfg)
 
                 self._th_logger.info(
                     f"Found {len(mtr_msd_poll_hrs)} in '{mtr_cfg.meter_name}' "
@@ -101,8 +108,17 @@ class GapsDetectionWorker(BaseFetchWorker):
             self._meters_queue.task_done()
 
     def run(self, run_time: DateTime) -> None:
+        """Run loop entrypoint"""
         self.configure(run_time)
-        self._run_consumers((self.missed_hours_consumer, [require_client()]))
+        self._run_consumers(
+            [(self.missed_hours_consumer, [require_client()])],
+            run_parallel=RUN_GAPS_PARALLEL,
+        )
+
+    # TODO: should be removed
+    @abstractmethod
+    def run_fetch_worker(self, logs: Queue, worker_idx: int) -> None:
+        """Run fetch worker"""
 
 
 class FetchWorker(BaseFetchWorker):
@@ -118,6 +134,7 @@ class FetchWorker(BaseFetchWorker):
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
+    __request_timeout__ = 60
 
     def __init__(
         self,
@@ -142,7 +159,7 @@ class FetchWorker(BaseFetchWorker):
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
 
-    def _fetch_data(
+    def _request_data(
         self, client: Client, filename: str, dt_time: DateTime, logs: Queue
     ) -> dict:
         result, retry_count, delay = {}, 0, self.__retry_delay__
@@ -182,6 +199,7 @@ class FetchWorker(BaseFetchWorker):
                         "units": "imperial",
                     },
                     headers={"Content-Type": "application/json"},
+                    timeout=self.__request_timeout__,
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     result = result.json()
@@ -209,32 +227,12 @@ class FetchWorker(BaseFetchWorker):
 
         return result
 
-    def _request_data(
-        self, url: str, params: dict, headers: str
-    ) -> Optional[requests.Response]:
-        result, retry_count, delay = None, 0, 0.5
-
-        while retry_count < self.__max_retry_count__:
-            try:
-                result = requests.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                )
-                if result.status_code == HTTPStatus.OK.value:
-                    break
-                retry_count += 1
-                delay *= retry_count
-                time.sleep(delay)
-            except (requests.ConnectionError, requests.ConnectTimeout):
-                retry_count += 1
-                delay *= retry_count
-                time.sleep(delay)
-        return result
-
     def fetch_consumer(
-        self, storage_client: Client, logs: Queue, worker_idx: str
-    ) -> None:  # pylint:disable=unused-argument
+        self,
+        storage_client: Client,
+        logs: Queue,  # pylint:disable=unused-argument
+        worker_idx: str,  # pylint:disable=unused-argument
+    ) -> None:
         """Fetch data Consumer"""
         if not bool(len(self._missed_hours_queue)):
             self._th_logger.warning(
@@ -250,7 +248,7 @@ class FetchWorker(BaseFetchWorker):
             else:
                 mtr_hr, mtr_cfgs = self._missed_hours_queue.popitem()
                 filename = format_date(mtr_hr, CFG.PROCESSING_DATE_FORMAT)
-                data = self._fetch_data(
+                data = self._request_data(
                     client=storage_client, filename=filename, dt_time=mtr_hr, logs=logs
                 )
                 if not data:
@@ -293,7 +291,7 @@ class FetchWorker(BaseFetchWorker):
         """Run fetch worker"""
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Openweather Standardization Worker."""
 
     __created_by__ = "OpenWeather Connector"

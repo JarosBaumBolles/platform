@@ -1,57 +1,26 @@
 """Density integration"""
+import base64
 import uuid
-from dataclasses import asdict, dataclass, field, replace
-from typing import Optional, Dict
+from collections import Counter
+from json import JSONDecodeError, dumps, load
+from pathlib import Path
+from queue import Queue
+from typing import Optional
 
-from googleapiclient.errors import HttpError
-from pendulum import DateTime
+from dataclass_factory import Factory
+from expiringdict import ExpiringDict
 
 from common import settings as CFG
-from common.bucket_helpers import file_exists, get_missed_standardized_files
-from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
-from common.request_helpers import PayloadType, retry
-from integration.base_integration import (
-    BasePullConnector,
-    GeneralInfo,
-    MeterConfig,
-    Meters,
-    StorageInfo,
-)
+from integration.base_integration import BasePullConnector
 from integration.density.config import DensityCfg
-from dataclass_factory import Factory
-from google.cloud.storage import Client
-from expiringdict import ExpiringDict
-from pathlib import Path
-from integration.density.workers import (
-    GapsDetectionWorker, 
-    FetchWorker,
-    StandrdizeWorker
-)
-from queue import Queue
 from integration.density.exception import MalformedConfig
-from collections import Counter
-
-# class EmptyRawData(Exception):
-#     """Exception class specific to this package."""
-
-
-# @dataclass
-# class FetchPayload:
-#     "Fetch Payload Configuration"
-#     space_id: str = ""
-#     token: str = ""
-#     floor: str = ""
-
-
-# @dataclass
-# class FetchConfiguration:
-#     """Fetch Configuration"""
-
-#     gap_regeneration_window: int = 0
-#     storage: StorageInfo = field(default_factory=StorageInfo)
+from integration.density.workers import (
+    FetchWorker,
+    GapsDetectionWorker,
+    StandardizeWorker,
+)
 
 
 class DensityConnector(BasePullConnector):
@@ -68,10 +37,7 @@ class DensityConnector(BasePullConnector):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
 
-        self._missed_hours = ExpiringDict(
-            max_len=2000, 
-            max_age_seconds=3600
-        )
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
         self._config: Optional[DensityCfg] = None
 
         self._gaps_worker: Optional[GapsDetectionWorker] = None
@@ -86,14 +52,7 @@ class DensityConnector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None       
-
-        # self._cfg_meters = Meters()
-        # self._cfg_general = GeneralInfo()
-        # self._fetch_payload = FetchPayload()
-        # self._cfg_fetch = FetchConfiguration()
-        # self._missed_hours = {}
-        # self._auth_token = ""  # nosec
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
@@ -108,23 +67,22 @@ class DensityConnector(BasePullConnector):
                 raise MalformedConfig from err
 
             self._gaps_worker = GapsDetectionWorker(
-                missed_hours_cache=self._missed_hours,
-                config=self._config
+                missed_hours_cache=self._missed_hours, config=self._config
             )
 
             self._fetch_worker = FetchWorker(
-                missed_hours = self._missed_hours, 
+                missed_hours=self._missed_hours,
                 fetched_files=self._fetched_files_q,
                 fetch_update=self._fetch_update_q,
                 config=self._config,
             )
 
-            self._standardize_worker = StandrdizeWorker(
+            self._standardize_worker = StandardizeWorker(
                 raw_files=self._fetched_files_q,
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,
                 config=self._config,
-            )            
+            )
 
         self._logger.debug(
             "Loaded configuration.",
@@ -133,8 +91,7 @@ class DensityConnector(BasePullConnector):
                     "elapsed_teime": elapsed(),
                 }
             },
-        )            
-
+        )
 
     def get_missed_hours(self) -> None:
         """Get list of missed hours"""
@@ -146,17 +103,13 @@ class DensityConnector(BasePullConnector):
         self._logger.info("Matching missed hour.")
 
         with elapsed_timer() as elapsed:
-            self._gaps_worker.run()
+            self._gaps_worker.run(self._run_time)
 
         self._logger.debug(
-            "Matched missed hour.", extra={
-                "labels": {
-                    "elapsed_time": elapsed()
-                }
-            }
+            "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
         )
 
-    # TODO: @todo Redesign. Move to base class 
+    # TODO: @todo Redesign. Move to base class
     def fetch(self) -> None:
         with elapsed_timer() as ellapsed:
             self._logger.info("Fetching data.")
@@ -170,12 +123,9 @@ class DensityConnector(BasePullConnector):
         self._logger.info(f"Fetching `{self.__name__}` data")
 
         if self._fetch_worker is None:
-            self._logger.error(
-                "The 'configure' method must be run before. Complete."
-            )
-            return None
-
-        self._fetch_worker.run(self._run_time)    
+            self._logger.error("The 'configure' method must be run before. Complete.")
+        else:
+            self._fetch_worker.run(self._run_time)
 
     # TODO: @todo Candidate to be in a base class
     def standardize(self) -> None:
@@ -193,7 +143,6 @@ class DensityConnector(BasePullConnector):
                 extra={"labels": {"elapsed_time": elapsed()}},
             )
         return None
-    
 
     def run(self):
         super().run()
@@ -218,9 +167,6 @@ def main(event, context):  # pylint:disable=unused-argument
 
 
 if __name__ == "__main__":
-    import base64
-    from json import dumps, load
-
     CONNECTOR_NAME = "density"
     METERS_AMOUNT = 4
     debug_logger = Logger(

@@ -216,7 +216,7 @@ class FetchWorker(BaseFetchWorker):
                 self._missed_hours_queue.task_done()
 
 
-class StandrdizeWorker(BaseStandardizeWorker):
+class StandardizeWorker(BaseStandardizeWorker):
     """Source Standardization Worker."""
 
     __created_by__ = "Sourceone Connector"

@@ -9,3 +9,6 @@ class MalformedConfig(Exception):
 
 class EmptyDataInterruption(Exception):
     """Exception class specific to this package."""
+
+class EmptyRawData(Exception):
+    """Exception class specific to this package."""    

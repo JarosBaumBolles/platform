@@ -2,8 +2,11 @@
 
     MVP. At the moment contains simliest sync approach.
     All operations run one by one without any paralelization approach.
-    This way used to provide first deliverable MVP asap/ In next iteration code
+    This way used to provide first deliverable MVP asap. In next iteration code
     below should be redesigned aith asyncio approarch.
+
+
+    TOTALY OBSOLETE. SHOULD BE Redesigned
 """
 import base64
 import logging

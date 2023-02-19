@@ -1,13 +1,11 @@
 """Base Integration init module"""
 
-from integration.base_integration.base import (
+from integration.base_integration.base import (  # GeneralInfo,; Meters,
     BaseAbstractConnnector,
     BaseConnector,
     BasePullConnector,
     BasePushConnector,
-    GeneralInfo,
     MeterConfig,
-    Meters,
 )
 from integration.base_integration.base_worker import (
     BaseFetchWorker,
@@ -19,7 +17,9 @@ from integration.base_integration.config import (
     ExtraInfo,
     FetchStrategy,
     MeterCfg,
+    ShiftHours,
     StorageInfo,
+    TimeShift,
 )
 from integration.base_integration.exceptions import EmptyRawFile, MalformedConfig
 
@@ -30,15 +30,16 @@ __all__ = [
     "BaseConnector",
     "MeterConfig",
     "StorageInfo",
-    "GeneralInfo",
-    "Meters",
     "BaseWorker",
     "UpdateConfig",
     "BaseFetchWorker",
     "BaseStandardizeWorker",
     "MalformedConfig",
     "EmptyRawFile",
-    "MeterCfg",
+    "StorageInfo",
     "FetchStrategy",
     "ExtraInfo",
+    "MeterCfg",
+    "ShiftHours",
+    "TimeShift",
 ]

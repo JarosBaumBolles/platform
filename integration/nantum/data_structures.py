@@ -1,16 +1,12 @@
 """Configuration of Integration."""
 from dataclasses import dataclass, field
+from queue import Queue
 from typing import Any, Dict, List, Optional
 
 from pendulum import DateTime
 
-from integration.nantum.config import MeterCfg
-from queue import Queue
 from common.data_representation.standardized import Meter
-
-@dataclass
-class RawFile:
-    pass
+from integration.nantum.config import MeterCfg
 
 
 @dataclass
@@ -26,12 +22,16 @@ class FetchPayload:
 
 @dataclass
 class NantumResponseReadingsPoint:
+    """Nantum readings"""
+
     time: str = ""
     value: int = 0
 
 
 @dataclass
 class NantumResponseCalculate:
+    """Nantum response calculate structure"""
+
     sensors: List[str] = field(default_factory=list)
     source: str = ""
     type: str = ""
@@ -39,6 +39,8 @@ class NantumResponseCalculate:
 
 @dataclass
 class NantumResponseDoc:
+    """Response doc structure"""
+
     _id: str = ""
     benchmark: bool = False
     building: str = ""
@@ -71,56 +73,57 @@ class NantumResponseDoc:
 
 @dataclass
 class NantumResponseStats:
+    """Nantum response stats"""
+
     cursor: int = -1
     query_total: int = -1
 
 
 @dataclass
 class NantumResponse:
+    """Nantum Response"""
+
     docs: List[NantumResponseDoc] = field(default_factory=list)
     stats: Optional[NantumResponseStats] = None
-
-
-# @dataclass
-# class RawFetchFile:
-#     """Fetch request hour data"""
-
-#     file_name: str = ""
-#     meter_cfg: Optional[MeterCfg] = None
-#     meters_hours: Optional[List[DateTime]] = None
-#     raw_data: Optional[NantumResponse] = None
 
 
 @dataclass
 class DataFile:
     """Data file structure"""
+
     file_name: str = ""
     bucket: str = ""
     path: str = ""
     body: str = ""
     cfg: Any = ""
 
+
 @dataclass
 class RawFetchFile:
     """Data file structure"""
+
     file_name: str = ""
     bucket: str = ""
     path: str = ""
     body: str = ""
+
 
 @dataclass
 class DocFetchFile:
     """Nantum Fetch doc file. Used for standardization."""
+
     doc: NantumResponseDoc = field(default_factory=NantumResponseDoc)
     meters: Queue = field(default_factory=Queue)
     timestamps: Queue = field(default_factory=Queue)
 
+
 @dataclass
 class StandardizedFile:
     """Data file structure"""
+
     file_name: str = ""
     bucket: str = ""
     path: str = ""
     body: str = ""
-    meter: Meter = field(default_factory=lambda: Meter())
-    cfg: Any = ""    
+    meter: Meter = field(default_factory=Meter)
+    cfg: Any = ""

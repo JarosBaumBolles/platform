@@ -12,8 +12,11 @@ from itertools import islice
 from json import dumps, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
+from queue import Queue
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
+from dataclass_factory import Factory, Schema
+from expiringdict import ExpiringDict
 from google.cloud import exceptions as gcp_eceptions
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError, NotFound
@@ -32,6 +35,7 @@ from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration.config import StorageInfo
+from integration.base_integration.exceptions import MalformedConfig
 
 MAX_ID_VALUE = 9223372036854775807
 DEFAULT_WORKER_REPLICA_AMOUNT = 20
@@ -52,25 +56,6 @@ class MeterConfig:
     storage: StorageInfo = field(default_factory=StorageInfo)
 
 
-# TODO: should be refactored to use common realization from
-# base_integration.config ExtraInfo
-@dataclass
-class GeneralInfo:
-    """General Integration Info"""
-
-    participant_id: int = 0
-    timezone: str = ""
-    fetch_strategy: str = ""
-    description: str = ""
-
-
-@dataclass
-class Meters:
-    """List of meters config"""
-
-    meters: dict = field(default_factory=dict)
-
-
 class BaseAbstractConnnector:
     """Base Integration"""
 
@@ -78,10 +63,11 @@ class BaseAbstractConnnector:
 
     def __init__(self, env_tz_info: str) -> None:
         self.env_tz_info = parse_timezone(env_tz_info)
+        self._run_time: Optional[DateTime] = None
 
-    @abstractmethod
     def run(self) -> None:
-        """Loop runner"""
+        """Run loop entrypoint"""
+        self._run_time = parse(tz_info=self.env_tz_info)
 
     @abstractmethod
     def save_update_status(self):
@@ -96,23 +82,12 @@ class BaseAbstractConnnector:
         """Parse configuration"""
 
 
-class RawFilesWorker:
-    """Raw Files Worker"""
-
-    def __init__(
-        self,
-        missed_hours: queue.Queue,
-        fetched_files: queue.Queue,
-    ) -> None:
-        self.missed_hours: queue.Queue = missed_hours
-        self.fetched_files: queue.Queue = fetched_files
-
-
 class BaseConnector(BaseAbstractConnnector):
     """Integrations base functional"""
 
     __created_by__ = "Base Connector"
     __description__ = "Base Integration"
+    __name__ = "Base connector"
     __update_prefix__ = "updates"
 
     def __init__(self, env_tz_info: str) -> None:
@@ -121,8 +96,24 @@ class BaseConnector(BaseAbstractConnnector):
         self._trace_id = str(uuid.uuid4())
         self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
 
-    def run(self) -> None:
-        self._run_time = parse(tz_info=self.env_tz_info)
+        self._factory = Factory(
+            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
+        )
+
+        self._config: Optional[Any] = None
+
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
+
+        self._fetched_files_q: Queue = Queue()
+        self._fetch_update_q: Queue = Queue()
+
+        self._standardized_files: Queue = Queue()
+        self._standardized_update_files: Queue = Queue()
+        self._standardized_files_count: Counter = Counter()
+
+        self._gaps_worker: Optional[Any] = None
+        self._fetch_worker: Optional[Any] = None
+        self._standardize_worker: Optional[Any] = None
 
     def parse_base_configuration(self, conf_data: bytes) -> dict:
         try:
@@ -215,6 +206,8 @@ class BaseConnector(BaseAbstractConnnector):
             )
             return data
 
+    # TODO: Should be removed. All standardize logic should be in
+    # standardize workers
     def _standardize_generic(
         self, data: dict, mtr_cfg: dict, getter: Callable
     ) -> Meter:
@@ -238,6 +231,102 @@ class BaseConnector(BaseAbstractConnnector):
     @abstractmethod
     def configure(self, conf_data: bytes) -> None:
         """Parse configuration"""
+
+    def _get_config(self, conf_data: bytes, cof_cls: type) -> type:
+        try:
+            js_config = self.parse_base_configuration(conf_data)
+            js_config["timestamp_shift"] = loads(
+                js_config.get("timestamp_shift", "{}").replace("'", '"')
+            )
+            if not js_config:
+                self._logger.error("Recieved empty config")
+                raise MalformedConfig("Recieved Malformed configuration JSON")
+
+            config = self._factory.load(js_config, cof_cls)
+        except (ValueError, TypeError, JSONDecodeError) as err:
+            self._logger.error(f"Cannot loads '{js_config}' due to the error '{err}'")
+            raise MalformedConfig from err
+        else:
+            return config
+
+    def _configure_workers(
+        self, gaps_cls: type, fetch_cls: type, standardize_cls: type
+    ) -> None:
+        self._gaps_worker = gaps_cls(
+            missed_hours_cache=self._missed_hours, config=self._config
+        )
+
+        self._fetch_worker = fetch_cls(
+            missed_hours=self._missed_hours,
+            fetched_files=self._fetched_files_q,
+            fetch_update=self._fetch_update_q,
+            config=self._config,
+        )
+
+        self._standardize_worker = standardize_cls(
+            raw_files=self._fetched_files_q,
+            standardized_files=self._standardized_files,
+            standardize_update=self._standardized_update_files,
+            config=self._config,
+        )
+
+    def get_missed_hours(self) -> None:
+        """Get list of missed hours"""
+        # Standardized data stored separately by type meter. It means that it
+        # possible to miss different hours for each meter in a list.
+        # As the result we need to check each given meter for misssed hour
+        # and build index (relation) between missedd hour and related meters
+
+        self._logger.info("Matching missed hour.")
+
+        with elapsed_timer() as elapsed:
+            self._gaps_worker.run(self._run_time)
+
+        self._logger.debug(
+            "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
+        )
+
+    def fetch(self) -> None:
+        """Fetch data"""
+        with elapsed_timer() as ellapsed:
+            self._logger.info("Fetching data.")
+            self._fetch_data()
+            self._logger.debug(
+                "Fetched missed hours.", extra={"labels": {"elapsed_time": ellapsed()}}
+            )
+
+    def _fetch_data(self) -> None:
+        """Integration Fetch logic"""
+        self._logger.info(f"Fetching `{self.__name__}` data")
+
+        if self._fetch_worker is None:
+            self._logger.error("The 'configure' method must be run before. Complete.")
+            return None
+
+        self._fetch_worker.run(self._run_time)
+        return None
+
+    def standardize(self) -> None:
+        with elapsed_timer() as elapsed:
+            self._logger.info("Start standardizing of fetched data.")
+            if self._standardize_worker is None:
+                self._logger.error(
+                    "The 'configure' method must be run before. Complete."
+                )
+                return None
+            self._standardize_worker.run(self._run_time)
+
+            self._logger.info(
+                "Completed data standardization.",
+                extra={"labels": {"elapsed_time": elapsed()}},
+            )
+        return None
+
+    def run(self):
+        super().run()
+        self.get_missed_hours()
+        self.fetch()
+        self.standardize()
 
 
 class BasePushConnector(BaseConnector):
@@ -765,11 +854,11 @@ class BasePushConnector(BaseConnector):
             )
 
     @abstractmethod
-    def fetch(self, working_directory: tempfile.TemporaryDirectory) -> None:
+    def fetch(self) -> None:
         """Fetch Integration data"""
 
     @abstractmethod
-    def standardize(self, working_directory: tempfile.TemporaryDirectory) -> None:
+    def standardize(self) -> None:
         """Standardize Fetched data"""
 
 
@@ -809,11 +898,7 @@ class BasePullConnector(BaseConnector):
             )
         else:
             self._fetched_files[meter_name].add(
-                (
-                    self._config.extra.raw.bucket, 
-                    self._config.extra.raw.path, 
-                    filename
-                )
+                (self._config.extra.raw.bucket, self._config.extra.raw.path, filename)
             )
 
     def _save_standardized_data(
@@ -922,12 +1007,10 @@ class BasePullConnector(BaseConnector):
 
     def _get_meter_config_by_type(self, mtr_type: str) -> Optional[Any]:
         for mtr_cfg in self._config.meters:
-            self._logger.debug(
-                f"meter type is - {mtr_cfg.type}"
-            )
+            self._logger.debug(f"meter type is - {mtr_cfg.type}")
             if mtr_cfg.type.strip().lower() == mtr_type.strip().lower():
                 return mtr_cfg
-        return None        
+        return None
 
     def _save_standardize_update_status(self) -> None:
         with elapsed_timer() as elapsed:
@@ -942,7 +1025,7 @@ class BasePullConnector(BaseConnector):
                     self._logger.error(
                         "Cannot find meter config for the given type "
                         f"{mtr_type}. Skipping"
-                    )                 
+                    )
                     continue
                 cache = set()
                 json_data = {"files": []}
@@ -960,34 +1043,25 @@ class BasePullConnector(BaseConnector):
                         self.__update_prefix__
                     )
                     for indx, chunk in enumerate(chunks, 1):
-                        data = {
-                            "amounts": len(chunk),
-                            "files": [],
-                            "updates": []
-                        }
+                        data = {"amounts": len(chunk), "files": [], "updates": []}
 
                         for bucket, path, filename, mtr in chunk:
                             data["files"].append(
-                                {
-                                    "bucket": bucket,
-                                    "path": path,
-                                    "filename": filename
-                                }
+                                {"bucket": bucket, "path": path, "filename": filename}
                             )
 
                             data["updates"].append(
                                 {
-                                    "data":float(mtr.usage),
+                                    "data": float(mtr.usage),
                                     "ref_hour_id": int(
                                         format_date(
-                                            mtr.start_time,
-                                            CFG.HOUR_ID_DATE_FORMAT
+                                            mtr.start_time, CFG.HOUR_ID_DATE_FORMAT
                                         )
                                     ),
                                     "ref_meter_id": int(mtr.meter_id),
                                     "ref_participant_id": int(
                                         self._config.extra.participant_id
-                                    )
+                                    ),
                                 }
                             )
 
@@ -1022,10 +1096,10 @@ class BasePullConnector(BaseConnector):
     def configure(self, conf_data: bytes) -> None:
         pass
 
-    @abstractmethod
-    def standardize(self) -> None:
-        """Standardize Fetched Data"""
+    # @abstractmethod
+    # def standardize(self) -> None:
+    #     """Standardize Fetched Data"""
 
-    @abstractmethod
-    def fetch(self) -> Any:
-        """Fetch data from data source"""
+    # @abstractmethod
+    # def fetch(self) -> Any:
+    #     """Fetch data from data source"""

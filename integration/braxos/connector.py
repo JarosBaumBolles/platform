@@ -18,7 +18,7 @@ from integration.braxos.exception import MalformedConfig
 from integration.braxos.workers import (
     FetchWorker,
     GapsDetectionWorker,
-    StandrdizeWorker,
+    StandardizeWorker,
 )
 
 
@@ -47,7 +47,7 @@ class BraxosConnector(BasePullConnector):
         self._standardized_files: Queue = Queue()
         self._standardized_update_files: Queue = Queue()
         self._standardized_files_count: Counter = Counter()
-        self._standardize_worker: Optional[StandrdizeWorker] = None
+        self._standardize_worker: Optional[StandardizeWorker] = None
 
     def configure(self, conf_data: bytes) -> None:
         self._logger.debug("Loading configuration.")
@@ -79,7 +79,7 @@ class BraxosConnector(BasePullConnector):
                 config=self._config,
             )
 
-            self._standardize_worker = StandrdizeWorker(
+            self._standardize_worker = StandardizeWorker(
                 raw_files=self._fetched_files_q,
                 standardized_files=self._standardized_files,
                 standardize_update=self._standardized_update_files,
@@ -154,8 +154,6 @@ class BraxosConnector(BasePullConnector):
         self.get_missed_hours()
         self.fetch()
         self.standardize()
-        # self.save_update_status()
-        print("")
 
 
 def main(event, context):  # pylint:disable=unused-argument
