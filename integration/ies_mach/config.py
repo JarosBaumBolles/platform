@@ -13,5 +13,6 @@ class IesMachCfg:  # pylint:disable=too-many-instance-attributes
     extra: ExtraInfo = field(default_factory=ExtraInfo)
     datapoint_id: str = ""
     auth_token: str = ""
+    time_zone: str = ""
     gap_regeneration_window: int = -1
     timestamp_shift: TimeShift = field(default_factory=TimeShift)

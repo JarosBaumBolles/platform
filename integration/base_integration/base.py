@@ -13,7 +13,23 @@ from json import dumps, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
 from queue import Queue
+<<<<<<< Updated upstream
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+=======
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
+>>>>>>> Stashed changes
 
 from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
@@ -35,14 +51,19 @@ from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from common.thread_pool_executor import run_thread_pool_executor
 from integration.base_integration.config import StorageInfo
+<<<<<<< Updated upstream
 from integration.base_integration.exceptions import MalformedConfig
+=======
+from integration.base_integration.exceptions import (
+    ConfigValidationError,
+    MalformedConfig,
+)
+>>>>>>> Stashed changes
 
 MAX_ID_VALUE = 9223372036854775807
 DEFAULT_WORKER_REPLICA_AMOUNT = 20
 
-
-class ConnectorConfigException(Exception):
-    """Exception class specific to this package."""
+T = TypeVar("T")
 
 
 # TODO: should be refactored to use common realization from
@@ -74,11 +95,19 @@ class BaseAbstractConnnector:
         """Save staus after update"""
 
     @abstractmethod
-    def parse_base_configuration(self, conf_data: bytes) -> dict:
-        """Base config parser"""
+    def _before_configuration(self, data: bytes) -> Optional[Any]:
+        """Actions before config parser"""
 
     @abstractmethod
-    def configure(self, conf_data: bytes) -> None:
+    def _after_configuration(self, config: T, *args, **kwargs) -> Optional[Any]:
+        """Actions after config parser"""
+
+    @abstractmethod
+    def _config_validation(self, *args, **kwargs) -> bool:
+        """Validate config after"""
+
+    @abstractmethod
+    def configure(self, data: bytes) -> None:
         """Parse configuration"""
 
 
@@ -99,6 +128,7 @@ class BaseConnector(BaseAbstractConnnector):
         self._factory = Factory(
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
+<<<<<<< Updated upstream
 
         self._config: Optional[Any] = None
 
@@ -114,13 +144,23 @@ class BaseConnector(BaseAbstractConnnector):
         self._gaps_worker: Optional[Any] = None
         self._fetch_worker: Optional[Any] = None
         self._standardize_worker: Optional[Any] = None
+=======
+>>>>>>> Stashed changes
 
-    def parse_base_configuration(self, conf_data: bytes) -> dict:
-        try:
-            return loads(base64.b64decode(conf_data["data"]))["data"]
-        except (ValueError, TypeError) as err:
-            self._logger.error(f"Cannot parse configuration due to the error '{err}'")
-            raise ConnectorConfigException from err
+        self._config: Optional[Any] = None
+
+        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
+
+        self._fetched_files_q: Queue = Queue()
+        self._fetch_update_q: Queue = Queue()
+
+        self._standardized_files: Queue = Queue()
+        self._standardized_update_files: Queue = Queue()
+        self._standardized_files_count: Counter = Counter()
+
+        self._gaps_worker: Optional[Any] = None
+        self._fetch_worker: Optional[Any] = None
+        self._standardize_worker: Optional[Any] = None
 
     @staticmethod
     def split_into_chunks(seq: Iterable[List[Any]], size: int) -> Tuple[List[Any]]:
@@ -229,9 +269,10 @@ class BaseConnector(BaseAbstractConnnector):
         return iter(lambda: tuple(islice(itr, size)), ())
 
     @abstractmethod
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         """Parse configuration"""
 
+<<<<<<< Updated upstream
     def _get_config(self, conf_data: bytes, cof_cls: type) -> type:
         try:
             js_config = self.parse_base_configuration(conf_data)
@@ -245,6 +286,39 @@ class BaseConnector(BaseAbstractConnnector):
             config = self._factory.load(js_config, cof_cls)
         except (ValueError, TypeError, JSONDecodeError) as err:
             self._logger.error(f"Cannot loads '{js_config}' due to the error '{err}'")
+=======
+    def _before_configuration(self, data: bytes) -> dict:
+        """Before configuration action"""
+        try:
+            return loads(base64.b64decode(data["data"]))["data"]
+        except (ValueError, TypeError) as err:
+            raise MalformedConfig(  # pylint:disable=raise-missing-from
+                f"Config is malformed due to the reason '{err}'"
+            )
+
+    def _after_configuration(self, config: T, *args, **kwargs) -> T:
+        """Actions after config parser"""
+        return config
+
+    def _config_validation(self, *args, **kwargs) -> None:
+        """Validate config after"""
+
+    # TODO @todo Try to use descriptors here to use more pythonic way
+    def _config_factory(self, data: Dict, class_: Type[T]) -> T:
+        """Parse configuration"""
+        try:
+            cfg = self._before_configuration(data)
+            if not cfg:
+                raise MalformedConfig("Recieved empty raw configuration data.")
+            cfg["timestamp_shift"] = loads(
+                cfg.get("timestamp_shift", "{}").replace("'", '"')
+            )
+
+            config = self._factory.load(cfg, class_)
+            config = self._after_configuration(config)
+            self._config_validation()
+        except (ValueError, TypeError, JSONDecodeError, ConfigValidationError) as err:
+>>>>>>> Stashed changes
             raise MalformedConfig from err
         else:
             return config
@@ -307,6 +381,10 @@ class BaseConnector(BaseAbstractConnnector):
         return None
 
     def standardize(self) -> None:
+<<<<<<< Updated upstream
+=======
+        """Standardize meter data"""
+>>>>>>> Stashed changes
         with elapsed_timer() as elapsed:
             self._logger.info("Start standardizing of fetched data.")
             if self._standardize_worker is None:
@@ -1093,7 +1171,7 @@ class BasePullConnector(BaseConnector):
             )
 
     @abstractmethod
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         pass
 
     # @abstractmethod

@@ -47,7 +47,7 @@ class Connector(BasePullConnector):
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self.parse_base_configuration(conf_data)
+                js_config = self._before_configuration(conf_data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, ConedCfg)

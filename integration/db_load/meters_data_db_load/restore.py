@@ -95,7 +95,7 @@ class DwLoadConnector(BasePullConnector):
     def configure(self, conf_data: bytes) -> None:
         with elapsed_timer() as elapsed:
             logging.debug(f"DEBUG: {self.__description__}: Loading configuration.")
-            js_config = self.parse_base_configuration(conf_data)
+            js_config = self._before_configuration(conf_data)
             self._historic_update_prefix += f'_{js_config["function_id"]}'
 
             meters_list = js_config.get("meters", [])

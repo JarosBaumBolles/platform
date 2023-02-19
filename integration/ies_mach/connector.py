@@ -4,6 +4,10 @@ import uuid
 from json import dumps, load
 from queue import Queue
 from typing import Optional
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 from common import settings as CFG
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
@@ -24,6 +28,8 @@ class IESMachConnector(BasePullConnector):
     __description__ = "IESMach Integration"
     __name__ = "IESMach Connector"
 
+    __right_timezones__ = ("UTC", "BuildingLocal")
+
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
         self._config: Optional[IesMachCfg] = None
@@ -35,10 +41,14 @@ class IESMachConnector(BasePullConnector):
         # and final refactoring
         self._standardized_files: Queue = Queue()
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
+<<<<<<< Updated upstream
             self._config = self._get_config(conf_data, IesMachCfg)
+=======
+            self._config = self._config_factory(data, IesMachCfg)
+>>>>>>> Stashed changes
             self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
 
         self._logger.debug(
@@ -50,6 +60,21 @@ class IESMachConnector(BasePullConnector):
             },
         )
 
+<<<<<<< Updated upstream
+=======
+    def _after_configuration(self, config: IesMachCfg, *args, **kwargs) -> IesMachCfg:
+        """Actions before config parser"""
+        super()._after_configuration(config, *args, **kwargs)
+        if config.time_zone not in self.__right_timezones__:
+            self._logger.warning(
+                f"Given timezone '{config.time_zone}' is not in alloved "
+                f"list '{self.__right_timezones__}'. Set to "
+                f"{self.__right_timezones__[0]}"
+            )
+            config.time_zone = self.__right_timezones__[0]
+        return config
+
+>>>>>>> Stashed changes
 
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""

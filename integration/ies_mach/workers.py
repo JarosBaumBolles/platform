@@ -130,7 +130,11 @@ class FetchWorker(BaseFetchWorker):
     __name__ = "Irisys Fetch Worker"
 
     __fetch_url__ = "https://api.iesmach.com/v1/intervals/query.json"
+<<<<<<< Updated upstream
     __time_zone__ = "UTC"
+=======
+
+>>>>>>> Stashed changes
     __api_date_format__ = "YYYY-MM-DDTHH:mm"
 
     __max_retry_count__ = 3
@@ -283,7 +287,11 @@ class FetchWorker(BaseFetchWorker):
                                     start_date, self.__api_date_format__
                                 ),
                                 "end": format_date(end_date, self.__api_date_format__),
+<<<<<<< Updated upstream
                                 "responseTimeZone": self.__time_zone__,
+=======
+                                "responseTimeZone": self._config.time_zone,
+>>>>>>> Stashed changes
                                 "datapoints": int(self._config.datapoint_id),
                             },
                             headers={
