@@ -27,11 +27,11 @@ class NantumBaseConnector(BasePullConnector):
     __description__ = "Nantum Integration"
     __name__ = "Nantum"
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self._before_configuration(conf_data)
+                js_config = self._before_configuration(data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, NantumCfg)
@@ -81,8 +81,8 @@ class NantumConnector(NantumBaseConnector):
         self._standardized_files_count: Counter = Counter()
         self._standardize_worker: Optional[StandardizeWorker] = None
 
-    def configure(self, conf_data: bytes) -> None:
-        super().configure(conf_data)
+    def configure(self, data: bytes) -> None:
+        super().configure(data)
 
         self._gaps_worker = GapsDetectionWorker(
             missed_hours_cache=self._missed_hours, config=self._config
