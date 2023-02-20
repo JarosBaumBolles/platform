@@ -573,7 +573,7 @@ class DwUpdateConnector(BasePullConnector):
             # info[key] = info[key]["general_info"]
             prprt_checksum = dumps(values["general_info"], sort_keys=True, indent=4)
 
-            prprt_checksum = hashlib.md5(     # nosec
+            prprt_checksum = hashlib.md5(  # nosec
                 prprt_checksum.encode("utf-8")
             ).hexdigest()
 
@@ -617,7 +617,7 @@ class DwUpdateConnector(BasePullConnector):
                     zip(self.__participant_meters_keys__, data_getter(meter))
                 )
                 mtr_checksum = dumps(mtr_data, sort_keys=True, indent=4)
-                mtr_checksum = hashlib.md5(   # nosec
+                mtr_checksum = hashlib.md5(  # nosec
                     mtr_checksum.encode("utf-8")
                 ).hexdigest()
 
@@ -675,11 +675,11 @@ class DwUpdateConnector(BasePullConnector):
                 f"{config['filename']}' due to the error '{err}'"
             )
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         with elapsed_timer() as elapsed:
             self._logger.debug("Loading configuration.")
 
-            js_config = self._before_configuration(conf_data)
+            js_config = self._before_configuration(data)
             self._logger.debug("Loading participant configuration.")
 
             if js_config["scope"] == DwScope.participant.value:
@@ -1436,7 +1436,7 @@ class DwUpdateConnector(BasePullConnector):
         )
 
     def run(self) -> None:
-        super().run()
+        self._run_time = parse(tz_info=self.env_tz_info)
         with elapsed_timer() as ellapsed:
             self._logger.info("Start db load processing.")
             dw_connection = self._get_dw_connection()

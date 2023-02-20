@@ -48,11 +48,11 @@ class WillowConnector(BasePullConnector):
         self._standardized_files_count: Counter = Counter()
         self._standardize_worker: Optional[StandardizeWorker] = None
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self._before_configuration(conf_data)
+                js_config = self._before_configuration(data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
 
