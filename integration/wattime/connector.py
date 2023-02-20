@@ -81,11 +81,11 @@ class WatTimeBaseConnector(BasePullConnector):
         else:
             self._fetch_worker.run(self._run_time)
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self._before_configuration(conf_data)
+                js_config = self._before_configuration(data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
 
@@ -140,8 +140,8 @@ class WatTimeMarginalEmissionsConnector(WatTimeBaseConnector):
     __fetch_url__ = "https://api2.watttime.org/v2/data"
     __workers_amount__ = 10
 
-    def configure(self, conf_data: bytes) -> None:
-        super().configure(conf_data)
+    def configure(self, data: bytes) -> None:
+        super().configure(data)
 
         self._gaps_worker = MarginalEmGapsDetectionWorker(
             missed_hours_cache=self._missed_hours, config=self._config
@@ -219,8 +219,8 @@ class WatTimeAverageEmissionsConnector(WatTimeBaseConnector):
         super().__init__(env_tz_info=env_tz_info)
         self._standardized_point_times = []
 
-    def configure(self, conf_data: bytes) -> None:
-        super().configure(conf_data)
+    def configure(self, data: bytes) -> None:
+        super().configure(data)
 
         self._gaps_worker = AverageEmGapsDetectionWorker(
             missed_hours_cache=self._missed_hours, config=self._config

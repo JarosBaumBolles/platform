@@ -67,11 +67,11 @@ class SourceOneBaseConnector(BasePushConnector):
     def _fetch_data(self) -> None:
         """Integration Fetch logic"""
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self._before_configuration(conf_data)
+                js_config = self._before_configuration(data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, SourceoneCfg)
@@ -184,8 +184,8 @@ class SourceOneConnector(SourceOneBaseConnector):
         self._is_fetch_run: bool = False
         self._config: Optional[SourceoneCfg] = None
 
-    def configure(self, conf_data: bytes) -> None:
-        super().configure(conf_data)
+    def configure(self, data: bytes) -> None:
+        super().configure(data)
 
         self._fetch_worker = FetchWorker(
             missed_hours=self._missed_hours,
