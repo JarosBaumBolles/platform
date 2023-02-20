@@ -82,7 +82,7 @@ class RegenerateStandardizeUpdateFiles(BasePushConnector):
 
         self._update_files: queue.Queue = queue.Queue()
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         with elapsed_timer() as elapsed:
             self._logger.debug("Loading configuration.")
             try:

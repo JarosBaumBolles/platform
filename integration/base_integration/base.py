@@ -110,6 +110,7 @@ class BaseConnector(BaseAbstractConnnector):
     __description__ = "Base Integration"
     __name__ = "Base connector"
     __update_prefix__ = "updates"
+    __missed_hours_len__ = 100000
 
     def __init__(self, env_tz_info: str) -> None:
         super().__init__(env_tz_info=env_tz_info)
@@ -123,7 +124,9 @@ class BaseConnector(BaseAbstractConnnector):
 
         self._config: Optional[Any] = None
 
-        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
+        self._missed_hours = ExpiringDict(
+            max_len=self.__missed_hours_len__, max_age_seconds=3600
+        )
 
         self._fetched_files_q: Queue = Queue()
         self._fetch_update_q: Queue = Queue()
@@ -887,12 +890,8 @@ class BasePushConnector(BaseConnector):
             )
 
     @abstractmethod
-    def fetch(self) -> None:
-        """Fetch Integration data"""
-
-    @abstractmethod
-    def standardize(self) -> None:
-        """Standardize Fetched data"""
+    def configure(self, data: bytes) -> None:
+        """Parse configuration"""
 
 
 class BasePullConnector(BaseConnector):

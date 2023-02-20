@@ -8,6 +8,7 @@ from typing import Optional
 
 from dataclass_factory import Factory
 from expiringdict import ExpiringDict
+
 from ci_tools.integrations.manual.date_shift.base.workers import (
     FetchWorker,
     StandardizeWorker,
@@ -26,11 +27,11 @@ class NantumBaseConnector(BasePullConnector):
     __description__ = "Nantum Integration"
     __name__ = "Nantum Shift Meter Date Local Connector"
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             try:
-                js_config = self._before_configuration(conf_data)
+                js_config = self._before_configuration(data)
                 if not js_config:
                     raise MalformedConfig("Recieved Malformed configuration JSON")
                 self._config = self._factory.load(js_config, NantumCfg)
@@ -79,8 +80,8 @@ class NantumConnector(NantumBaseConnector):
         self._standardized_files_count: Counter = Counter()
         self._standardize_worker: Optional[StandardizeWorker] = None
 
-    def configure(self, conf_data: bytes) -> None:
-        super().configure(conf_data)
+    def configure(self, data: bytes) -> None:
+        super().configure(data)
         self._fetch_worker = FetchWorker(
             missed_hours=self._missed_hours,
             fetched_files=self._fetched_files_q,
