@@ -77,6 +77,7 @@ class GapsDetectionWorker(BaseFetchWorker):
             self._th_logger.warning("Meters queue is empty.")
             return None
         empty_run_count = 0
+
         while True:
             if self._meters_queue.empty():
                 if empty_run_count == self.__max_idle_run_count__:
@@ -139,43 +140,6 @@ class FetchWorker(BaseFetchWorker):
 
     __fetch_file_name_tmpl__ = "{base_file_name}_{idx}"
     __sheet_execess_cols__ = (3, 4)
-
-    __meters_sheet_map__ = {
-        "meter_ecostruxture_1_electricity": "2nd Flr",
-        "meter_ecostruxture_2_electricity": "3rd Flr",
-        "meter_ecostruxture_3_electricity": "4th Flr",
-        "meter_ecostruxture_4_electricity": "5th Flr",
-        "meter_ecostruxture_5_electricity": "6th Flr East",
-        "meter_ecostruxture_6_electricity": "6th Flr West",
-        "meter_ecostruxture_7_electricity": "7th Flr East-1",
-        "meter_ecostruxture_8_electricity": "7th Flr East-2",
-        "meter_ecostruxture_9_electricity": "7th Flr West",
-        "meter_ecostruxture_10_electricity": "8th Flr East",
-        "meter_ecostruxture_11_electricity": "8th Flr West",
-        "meter_ecostruxture_12_electricity": "9th Flr East",
-        "meter_ecostruxture_13_electricity": "9th Flr West",
-        "meter_ecostruxture_14_electricity": "10th Flr East",
-        "meter_ecostruxture_15_electricity": "10th Flr West",
-        "meter_ecostruxture_16_electricity": "11th Flr East",
-        "meter_ecostruxture_17_electricity": "11th Flr West",
-        "meter_ecostruxture_18_electricity": "12th Flr East",
-        "meter_ecostruxture_19_electricity": "12th Flr West",
-        "meter_ecostruxture_20_electricity": "13th Flr East-1",
-        "meter_ecostruxture_21_electricity": "13th Flr East-2",
-        "meter_ecostruxture_22_electricity": "13th Flr West",
-        "meter_ecostruxture_23_electricity": "14th Flr East",
-        "meter_ecostruxture_24_electricity": "14th Flr West",
-        "meter_ecostruxture_25_electricity": "15th Flr East",
-        "meter_ecostruxture_26_electricity": "15th Flr West",
-        "meter_ecostruxture_27_electricity": "16th Flr East",
-        "meter_ecostruxture_28_electricity": "16th Flr West",
-        "meter_ecostruxture_29_electricity": "17th Flr East",
-        "meter_ecostruxture_30_electricity": "17th Flr West",
-        "meter_ecostruxture_31_electricity": "18th Flr East-1",
-        "meter_ecostruxture_32_electricity": "18th Flr East-2",
-        "meter_ecostruxture_33_electricity": "18th Flr West-1",
-        "meter_ecostruxture_34_electricity": "18th Flr West-2",
-    }
 
     __max_idle_run_count__ = 5
 
@@ -381,7 +345,7 @@ class FetchWorker(BaseFetchWorker):
                         mtr_cfgs = list(mtr_cfgs.queue) if mtr_cfgs else []
                     for mtr_cfg in mtr_cfgs:
                         mt_name = Path(mtr_cfg.meter_name).stem
-                        sheet_name = self.__meters_sheet_map__.get(mt_name, "")
+                        sheet_name = self._config.meters_sheet_mapper.get(mt_name, "")
                         if not sheet_name or sheet_name not in mtr_wb.sheetnames:
                             self._th_logger.warning(
                                 f"Cannot find sheet '{sheet_name}' related "
@@ -440,13 +404,18 @@ class StandardizeWorker(BaseStandardizeWorker):
     __description__ = "IES Mach Integration"
     __name__ = "IES Mach Standardize Worker"
 
-    @staticmethod
-    def date_repr(row):
+    def date_repr(self, row):
         """Get date string reprezentation and timestamp"""
         data = parse(row.Date, tz_info="UTC")
         data_hr = truncate(data, level="hour")
+
+        meter_data = self._adjust_meter_date(data)
+        meter_data_hr = truncate(meter_data, level="hour")
+
         row["Hours"] = format_date(data_hr, CFG.PROCESSING_DATE_FORMAT)
-        row["timestamp"] = int(data.timestamp())
+        row["MeterHours"] = format_date(meter_data_hr, CFG.PROCESSING_DATE_FORMAT)
+
+        row["timestamp"] = int(meter_data.timestamp())
         return row
 
     def _get_data_df(self, data: Any) -> DataFrame:
@@ -481,9 +450,10 @@ class StandardizeWorker(BaseStandardizeWorker):
         start_date = truncate(mtr_date, level="hour")
         end_date = start_date.add(minutes=59, seconds=59)
 
-        mtr_hr = format(start_date, CFG.PROCESSING_DATE_FORMAT)
+        mtr_date = self._adjust_meter_date(start_date)
+        mtr_hr = format(mtr_date, CFG.PROCESSING_DATE_FORMAT)
 
-        mtr_df = data_df[data_df.Hours == mtr_hr]
+        mtr_df = data_df[data_df.MeterHours == mtr_hr]
 
         if not bool(len(mtr_df)):
             raise EmptyDataInterruption(
@@ -492,7 +462,7 @@ class StandardizeWorker(BaseStandardizeWorker):
             )
 
         mtr_df = (
-            mtr_df.groupby(["Hours"])["RawConsumption"]
+            mtr_df.groupby(["MeterHours"])["RawConsumption"]
             .agg(["min", "max"])
             .reset_index()
         )

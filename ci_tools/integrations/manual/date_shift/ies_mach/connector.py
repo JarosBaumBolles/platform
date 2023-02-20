@@ -35,10 +35,10 @@ class Connector(BasePullConnector):
         # and final refactoring
         self._standardized_files: Queue = Queue()
 
-    def configure(self, conf_data: bytes) -> None:
+    def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            self._config = self._get_config(conf_data, IesMachCfg)
+            self._config = self._get_config(data, IesMachCfg)
 
             self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
 
