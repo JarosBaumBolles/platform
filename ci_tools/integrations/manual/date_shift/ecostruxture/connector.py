@@ -1,35 +1,35 @@
-"""IES Mach Integration"""
-import base64
+""" EcoStruxture integration module"""
+
 import uuid
-from json import dumps, load
+from json import JSONDecodeError, dumps, load, loads
+from pathlib import Path
 from queue import Queue
 from typing import Optional
 
-from common import settings as CFG
-from common.elapsed_time import elapsed_timer
-from common.logging import Logger
-from integration.base_integration import BasePullConnector
-from integration.base_integration.exceptions import MalformedConfig
-from integration.ies_mach.config import IesMachCfg
-from integration.ies_mach.workers import (
+from ci_tools.integrations.manual.date_shift.base.workers import (
     FetchWorker,
     GapsDetectionWorker,
     StandardizeWorker,
 )
+from common import settings as CFG
+from common.date_utils import parse
+from common.elapsed_time import elapsed_timer
+from common.logging import Logger
+from integration.base_integration import BasePushConnector
+from integration.ecostruxture.config import EcoStruxtureCfg
+from integration.ecostruxture.exceptions import MalformedConfig
 
 
-class IESMachConnector(BasePullConnector):
-    """IESMach Integration."""
+class EcoStruxtureConnector(BasePushConnector):
+    """EcoStruxture Integration"""
 
-    __created_by__ = "IESMach Connector"
-    __description__ = "IESMach Integration"
-    __name__ = "IESMach Connector"
-
-    __right_timezones__ = ("UTC", "BuildingLocal")
+    __created_by__ = "EcoStruxture Connector"
+    __description__ = "EcoStruxture Integration"
+    __name__ = "EcoStruxture Connector"
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
-        self._config: Optional[IesMachCfg] = None
+        self._config: Optional[EcoStruxtureCfg()] = None
         self._gaps_worker: Optional[GapsDetectionWorker] = None
         self._fetch_worker: Optional[FetchWorker] = None
         self._standardize_worker: Optional[StandardizeWorker] = None
@@ -41,7 +41,7 @@ class IESMachConnector(BasePullConnector):
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            self._config = self._config_factory(data, IesMachCfg)
+            self._config = self._config_factory(data, EcoStruxtureCfg)
             self._configure_workers(
                 gaps_cls=GapsDetectionWorker,
                 fetch_cls=FetchWorker,
@@ -57,51 +57,59 @@ class IESMachConnector(BasePullConnector):
             },
         )
 
-    def _after_configuration(self, config: IesMachCfg, *args, **kwargs) -> IesMachCfg:
+    def _after_configuration(
+        self, config: EcoStruxtureCfg, *args, **kwargs
+    ) -> EcoStruxtureCfg:
         """Actions before config parser"""
         super()._after_configuration(config, *args, **kwargs)
-        if config.time_zone not in self.__right_timezones__:
-            self._logger.warning(
-                f"Given timezone '{config.time_zone}' is not in alloved "
-                f"list '{self.__right_timezones__}'. Set to "
-                f"{self.__right_timezones__[0]}"
+
+        try:
+            config.meters_sheet_mapper = loads(
+                config.meters_sheet_mapper.replace("'", '"')
             )
-            config.time_zone = self.__right_timezones__[0]
+        except JSONDecodeError as err:
+            raise MalformedConfig(  # pylint:disable=raise-missing-from
+                f"Cannot convert given mapper dump '{config.meters_sheet_mapper}'"
+                f" to JSON object due to the reason '{err}'. Exit"
+            )
         return config
 
+    def run(self, **kwargs):
+        self._run_time = parse(tz_info=self.env_tz_info)
+        self.fetch()
+        self.standardize()
 
-def main(event, context):  # pylint:disable=unused-argument
+
+def main(event, context) -> None:  # pylint:disable=unused-argument
     """Entry point"""
     main_logger = Logger(
-        name="IES Mach run",
+        name="ecostruxture integration",
         level="DEBUG",
-        description="IES MACH run",
+        description="ECOSTRUXTURE INTEGRATION",
         trace_id=uuid.uuid4(),
     )
     with elapsed_timer() as elapsed:
-        try:
-            connector = IESMachConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
-            connector.configure(event)
-            connector.run()
-        except MalformedConfig as err:
-            main_logger.error(f"Cannot run connector due to the error '{err}'")
-        main_logger.info("Completed.", extra={"labels": {"elapsed_time": elapsed()}})
+        connector = EcoStruxtureConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
+        connector.configure(event)
+        connector.run()
+        main_logger.info("Completed", extra={"labels": {"elapsed_time": elapsed()}})
 
 
 if __name__ == "__main__":
-    CONNECTOR_NAME = "ies_mach"
+    import base64
+
+    CONNECTOR_NAME = "ecostruxture"
     METERS_AMOUNT = 1
-    debug_logger = Logger(
+    DEBUG_LOGGER = Logger(
         name="debug",
         level="DEBUG",
-        description="IES_MACH DEBUG",
+        description="ECOSTRUXTURE DEBUG",
         trace_id=uuid.uuid4(),
     )
-    debug_logger.info("Running IES_MACH integrations")
-
+    DEBUG_LOGGER.info("Running ECOSTRUXTURE integrations")
     import debugpy
 
-    debugpy.listen(CFG.DEBUG_PORT)
+    debugpy.listen(5678)
     debugpy.wait_for_client()  # blocks execution until client is attached
     debugpy.breakpoint()
 
@@ -112,8 +120,8 @@ if __name__ == "__main__":
                     f"participant_payload_{participant_id}_connector_"
                     f"{CONNECTOR_NAME}_{fl_idx}.json"
                 )
-                if not payload_file.exists():
-                    debug_logger.warning(
+                if not Path(payload_file).exists():
+                    DEBUG_LOGGER.warning(
                         f"Payload file '{payload_file}' does not exists. Skipping"
                     )
                     continue
@@ -124,7 +132,6 @@ if __name__ == "__main__":
                 json_config = dumps(cfg).encode("utf-8")
                 event_sample = {"data": base64.b64encode(json_config)}
                 main(event=event_sample, context=None)
-            debug_logger.info(
-                "Completed integration",
-                extra={"labels": {"elapsed_time": dbg_elapsed()}},
-            )
+        DEBUG_LOGGER.info(
+            "Completed integration", extra={"labels": {"elapsed_time": dbg_elapsed()}}
+        )

@@ -29,3 +29,15 @@ class StandardizedFile:
     body: str = ""
     meter: Meter = field(default_factory=Meter)
     cfg: Any = ""
+
+
+@dataclass
+class MoveFile:
+    """Data file structure"""
+
+    filename: str = ""
+    bucket: str = ""
+    path: str = ""
+    destination_filename: str = ""
+    destination_bucket: str = ""
+    destination_path: str = ""

@@ -4,6 +4,7 @@ import uuid
 from json import dumps, load
 from queue import Queue
 from typing import Optional
+
 from ci_tools.integrations.manual.date_shift.base.workers import (
     FetchWorker,
     GapsDetectionWorker,
@@ -38,9 +39,12 @@ class Connector(BasePullConnector):
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            self._config = self._get_config(data, IesMachCfg)
-
-            self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
+            self._config = self._config_factory(data, IesMachCfg)
+            self._configure_workers(
+                gaps_cls=GapsDetectionWorker,
+                fetch_cls=FetchWorker,
+                standardize_cls=StandardizeWorker,
+            )
 
         self._logger.debug(
             "Loaded configuration.",
@@ -51,7 +55,7 @@ class Connector(BasePullConnector):
             },
         )
 
-    def run(self):
+    def run(self, **kwargs):
         self._run_time = parse(tz_info=self.env_tz_info)
         self.fetch()
         self.standardize()

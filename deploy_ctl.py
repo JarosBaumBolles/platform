@@ -419,6 +419,7 @@ if __name__ == "__main__":
                     "--memory 2048MB "
                     "--region us-east4 "
                     "--allow-unauthenticated "
+                    f"--set-env-vars CONED_SUBSCRIPTION_KEY={settings.CONED_SUBSCRIPTION_KEY} "
                     f"--project {PROJECT} "
                     # "--vpc-connector gcp-connector "
                     "--timeout 540 "                    

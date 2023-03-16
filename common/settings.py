@@ -8,6 +8,7 @@ from pathlib import Path
 
 from environs import Env
 from tzlocal import get_localzone
+import pendulum as pdl
 
 if sys.version_info < (3, 8):  # pragma: no cover
     from typing_extensions import Final
@@ -113,6 +114,8 @@ UPDATE_PREFIX = "updates"
 UPDATE_FILENAME_PREFFIX_TMPL = "{update_prefix}-"
 UPDATE_FILENAME_TMPL = "{update_prefix}-{cnt}-{run_date}"
 PROCESSED_PREFIX = "processed"
+
+UTC_TIMEZONE = pdl.timezone("UTC")
 
 CONED_CLIENT_ID = os.environ.get("CONED_CLIENT_ID")
 CONED_CLIENT_SECRET =  os.environ.get("CONED_CLIENT_SECRET")

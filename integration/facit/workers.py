@@ -55,10 +55,6 @@ class FetchWorker(BaseFetchWorker):
         self._fetch_counter = Counter()
         self._fetch_processed_q = Queue()
 
-        self._factory = Factory(
-            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
-        )
-
     def configure(self, run_time: DateTime) -> None:
         super().configure(run_time)
         self._clear_queue(self._fetch_processed_q)
@@ -115,7 +111,7 @@ class FetchWorker(BaseFetchWorker):
             self._shadow_fetched_files_queue.put(file_info)
             self._add_to_update(file_info, self._fetch_update_file_buffer)
 
-    # TODO @todo Should be refactored. The similar code is in Facit
+    # TODO @todo Should be refactored. 
     def _move_processed_files_consumer(
         self,
         storage_client: Client,

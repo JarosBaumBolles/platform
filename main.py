@@ -233,17 +233,20 @@ def handle_request(request):
         main as coned_simulatro_main,
     )  # pylint:disable=import-outside-toplevel
 
+    from integration.coned.proxy import PROXY_ENDPOINTS, refresh_token
+
     request_path = request.path.rstrip("/")
 
     # We connect all URL dispatchers here and run logic until anything will be
     # returned (that means we have a match)
     if request_path in ALLOWED_CONED_ENDPOINTS:
-        response = coned_main(request)
-        return response
+        return coned_main(request)
 
     if request_path == CONED_ENDPOINT:
-        response = coned_simulatro_main(request_arg=request)
-        return response
+        return coned_simulatro_main(request_arg=request)
+
+    if request_path in PROXY_ENDPOINTS:
+        return refresh_token(request)
 
     # Add more URL dispatchers here. Ordering them properly will affect
     # performance in a good way.

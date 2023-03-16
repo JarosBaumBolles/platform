@@ -168,7 +168,7 @@ class DwLoadConnector(BasePullConnector):
                 " _load_updates_list_worker call. Skip."
             )
             return None
-        self._load_updates_list_worker.run()
+        self._load_updates_list_worker.run(self._run_time)
         return None
 
     def _finalize_update_files(self) -> None:
@@ -194,7 +194,7 @@ class DwLoadConnector(BasePullConnector):
                 " _load_updates_data_worker call. Skip."
             )
             return None
-        self._load_updates_data_worker.run()
+        self._load_updates_data_worker.run(self._run_time)
         return None
 
     def _create_temporary_table(self, client: Client) -> None:
@@ -272,7 +272,7 @@ class DwLoadConnector(BasePullConnector):
         job = client.query(query)
         job.result()
 
-    def run(self) -> None:
+    def run(self, **kwargs) -> None:
         with elapsed_timer() as ellapsed:
             self._load_updates_files_list()
             self._load_updates_data()
