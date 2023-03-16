@@ -5,6 +5,7 @@ from json import JSONDecodeError, dumps, load, loads
 from pathlib import Path
 from queue import Queue
 from typing import Optional
+
 from common import settings as CFG
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
@@ -36,28 +37,15 @@ class EcoStruxtureConnector(BasePushConnector):
         # and final refactoring
         self._standardized_files: Queue = Queue()
 
-        # self._factory = Factory()
-        # self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
-        # self._config: Optional[EcoStruxtureCfg] = None
-        # self._gaps_worker: Optional[GapsDetectionWorker] = None
-
-        # # TODO: SHOULD be moved to the BasePullConnector and propagated to
-        # # the other pull integrations
-
-        # self._fetched_files_q: Queue = Queue()
-        # self._fetch_update_q: Queue = Queue()
-        # self._fetch_worker: Optional[FetchWorker] = None
-
-        # self._standardized_files: Queue = Queue()
-        # self._standardized_update_files: Queue = Queue()
-        # self._standardized_files_count: Counter = Counter()
-        # self._standardize_worker: Optional[StandardizeWorker] = None
-
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
             self._config = self._config_factory(data, EcoStruxtureCfg)
-            self._configure_workers(GapsDetectionWorker, FetchWorker, StandardizeWorker)
+            self._configure_workers(
+                gaps_cls=GapsDetectionWorker,
+                fetch_cls=FetchWorker,
+                standardize_cls=StandardizeWorker,
+            )
 
         self._logger.debug(
             "Loaded configuration.",
@@ -117,8 +105,8 @@ if __name__ == "__main__":
 
     debugpy.listen(5678)
     debugpy.wait_for_client()  # blocks execution until client is attached
-
     debugpy.breakpoint()
+
     with elapsed_timer() as dbg_elapsed:
         for participant_id in CFG.DEBUG_PARTICIPANTS:
             for fl_idx in range(METERS_AMOUNT):

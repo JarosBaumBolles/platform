@@ -5,25 +5,24 @@ import uuid
 from abc import abstractmethod
 from collections import Counter
 from http import HTTPStatus
-from json import JSONDecodeError, dumps, loads
+from json import JSONDecodeError, dumps
 from queue import Queue
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
+import polars as pl
 import requests
-from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
 from google.cloud.storage import Client
-from pandas import DataFrame, Series, concat
 from pendulum import DateTime
 
 import common.settings as CFG
 from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
+from common.date_utils import GapDatePeriod, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
-from integration.irisys.data_structures import DataFile, StandardizedFile
-from integration.irisys.exceptions import (
+from integration.ies_mach.data_structures import DataFile, StandardizedFile
+from integration.ies_mach.exceptions import (
     EmptyDataInterruption,
     EmptyResponse,
     LoadFromConnectorAPI,
@@ -53,15 +52,18 @@ class GapsDetectionWorker(BaseFetchWorker):
         self._meters_queue = Queue()
         self._trace_id: str = uuid.uuid4()
         self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
-        self._logger = Logger(description=self.__description__, trace_id=self._trace_id)
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[GapDatePeriod] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -84,11 +86,13 @@ class GapsDetectionWorker(BaseFetchWorker):
                 continue
 
             mtr_cfg = self._meters_queue.get()
+
             mtr_msd_poll_hrs = get_missed_standardized_files(
                 bucket_name=mtr_cfg.standardized.bucket,
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
+                date_range=self._expected_hours,
             )
             if mtr_msd_poll_hrs:
                 for mt_hr in mtr_msd_poll_hrs:
@@ -131,12 +135,29 @@ class FetchWorker(BaseFetchWorker):
 
     __fetch_url__ = "https://api.iesmach.com/v1/intervals/query.json"
 
-    __api_date_format__ = "YYYY-MM-DDTHH:mm"
+    __api_date_formats__ = {
+        "buildinglocal": "YYYY-MM-DDTHH:mm",
+        "utc": "YYYY-MM-DDTHH:mm[Z]",
+    }
+
+    __api_default_date_format__ = "YYYY-MM-DDTHH:mm[Z]"
 
     __max_retry_count__ = 3
     __retry_delay__ = 0.5
     __max_idle_run_count__ = 5
     __request_timeout__ = 60
+
+    __raw_meter_hour_col__ = "RawDates"
+    __raw_occupancy_col__ = "Occupancy"
+    __drop_columns__ = ["statusId"]
+
+    __df_date_times_col__ = "Dates"
+    __df_aligned_date_times_col__ = "AlignedDates"
+    __df_adjusted_date_times_col__ = "AdjustedDates"
+    __df_aligned_adjusted_date_times_col__ = "AlignedAdjustedDates"
+    __df_timestamp_coll__ = "Timestamp"
+    __df_meter_hour_col__ = "MeterHour"
+    __df_meter_end_hour_col__ = "MeterEndHour"
 
     def __init__(
         self,
@@ -157,10 +178,6 @@ class FetchWorker(BaseFetchWorker):
         self._raw_fetch_queue = Queue()
         self._fetch_counter = Counter()
         self._auth_token: Optional[str] = ""
-
-        self._factory = Factory(
-            default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
-        )
 
     # TODO: @todo MUt be moved in base class/ The same code ia in Willow
     def _load_from_file(
@@ -238,6 +255,170 @@ class FetchWorker(BaseFetchWorker):
             )
         return data
 
+    def __df_rename_columns(self, data_df: pl.LazyFrame) -> pl.LazyFrame:
+        return data_df.lazy().rename(
+            {
+                "datetime": self.__raw_meter_hour_col__,
+                "value": self.__raw_occupancy_col__,
+            }
+        )
+
+    def __df_drop_columns(
+        self, data_df: pl.LazyFrame, columns: str | Sequence[str]
+    ) -> pl.LazyFrame:
+        return data_df.lazy().drop(columns)
+
+    # TODO: Refactiring candidate
+    @staticmethod
+    def __df_remove_dublicates(data_df: pl.LazyFrame) -> pl.LazyFrame:
+        return data_df.lazy().unique()
+
+    @staticmethod
+    def __df_set_type_inline(
+        data_df: pl.LazyFrame, column: str, pl_type: Any
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            pl.col(column).cast(pl_type, strict=False).keep_name()
+        )
+
+    @staticmethod
+    def __df_set_date_type(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str, tz_info: str = "UTC"
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: parse(y, tz_info=tz_info))).alias(
+                dest_col
+            )
+        )
+
+    @staticmethod
+    def __df_get_meter_hour(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (
+                pl.col(date_col).apply(
+                    lambda y: format_date(y, CFG.PROCESSING_DATE_FORMAT)
+                )
+            ).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_get_meter_end_hour(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (
+                pl.col(date_col).apply(
+                    lambda y: format_date(
+                        y.add(minutes=59, seconds=59), CFG.PROCESSING_DATE_FORMAT
+                    )
+                )
+            ).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_get_timestamp(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: int(y.timestamp()))).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_truncate_dates(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str, level: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: truncate(y, level=level))).alias(dest_col)
+        )
+
+    def __df_adjust_dates(
+        self, data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(self._adjust_meter_date)).alias(dest_col)
+        )
+
+    def __df_sort_by_group(
+        self, data_df: pl.LazyFrame, column: str, group: str, reverse: bool = False
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(pl.col(column).sort(reverse).over(group))
+
+    def __df_take_one_from_group(
+        self, data_df: pl.LazyFrame, group: str, keep_last: bool = False
+    ) -> pl.LazyFrame:
+        if keep_last:
+            return data_df.lazy().groupby(group).agg(pl.all().last())
+        return data_df.lazy().groupby(group).agg(pl.all().first())
+
+    def _get_data_pl_df(self, data: List[Dict[str, str | float | int]]) -> pl.LazyFrame:
+        if not data:
+            raise EmptyDataInterruption("Recieved Empty Data")
+
+        mtr_df = pl.from_dicts(data).lazy()
+
+        # NOTE: The IES Mach allows to get a few different occupancy values
+        # for the same date point. To fix this issue we try to take rows with
+        # maximum occupancy for each data point
+
+        return (
+            mtr_df.pipe(self.__df_rename_columns)
+            .pipe(self.__df_drop_columns, self.__drop_columns__)
+            .pipe(self.__df_set_type_inline, self.__raw_occupancy_col__, pl.Int64)
+            .pipe(self.__df_remove_dublicates)
+            .pipe(
+                self.__df_set_date_type,
+                self.__raw_meter_hour_col__,
+                self.__df_date_times_col__,
+            )
+            .pipe(
+                self.__df_truncate_dates,
+                self.__df_date_times_col__,
+                self.__df_aligned_date_times_col__,
+                "hour",
+            )
+            .pipe(
+                self.__df_sort_by_group,
+                self.__raw_occupancy_col__,
+                self.__raw_meter_hour_col__,
+                True,
+            )
+            .pipe(self.__df_take_one_from_group, self.__raw_meter_hour_col__, False)
+            .pipe(
+                self.__df_adjust_dates,
+                self.__df_date_times_col__,
+                self.__df_adjusted_date_times_col__,
+            )
+            .pipe(
+                self.__df_truncate_dates,
+                self.__df_adjusted_date_times_col__,
+                self.__df_aligned_adjusted_date_times_col__,
+                "hour",
+            )
+            .pipe(
+                self.__df_get_meter_hour,
+                self.__df_aligned_adjusted_date_times_col__,
+                self.__df_meter_hour_col__,
+            )
+            .pipe(
+                self.__df_get_timestamp,
+                self.__df_adjusted_date_times_col__,
+                self.__df_timestamp_coll__,
+            )
+            .pipe(
+                self.__df_get_meter_end_hour,
+                self.__df_aligned_adjusted_date_times_col__,
+                self.__df_meter_end_hour_col__,
+            )
+            .sort([self.__df_timestamp_coll__])
+        )
+
+    def _df_map_reduce(self, data_df: pl.LazyFrame) -> pl.LazyFrame:
+        return data_df.lazy().pipe(
+            self.__df_take_one_from_group, self.__df_meter_hour_col__, True
+        )
+
     def fetch_consumer(
         self,
         storage_client: Client,
@@ -251,74 +432,121 @@ class FetchWorker(BaseFetchWorker):
             )
             return None
 
-        empty_run_count = 0
         possible_errors = (EmptyResponse, requests.exceptions.JSONDecodeError)
 
-        while True:
-            if not bool(len(self._missed_hours_queue)):
-                if empty_run_count == self.__max_idle_run_count__:
-                    break
-                empty_run_count += 1
-            else:
-                mtr_hr, mtr_cfgs = self._missed_hours_queue.popitem()
-                filename = format_date(mtr_hr, CFG.PROCESSING_DATE_FORMAT)
-                try:
-                    try:
-                        data = self._load_from_file(
-                            filename=filename, storage_client=storage_client, logs=logs
-                        )
-                        add_to_update = False
-                    except LoadFromConnectorAPI as err:
-                        self._th_logger.info(
-                            f"Canot load the local file due to the reason '{err}'"
-                            " Loading from the IES Mach API"
-                        )
-                        start_date = truncate(parse(mtr_hr), level="hour")
-                        end_date = start_date.add(minutes=59, seconds=59)
+        filename = format_date(truncate(self._run_time), CFG.PROCESSING_DATE_FORMAT)
 
-                        data = self._request_data(
-                            url=self.__fetch_url__,
-                            json_params={
-                                "start": format_date(
-                                    start_date, self.__api_date_format__
-                                ),
-                                "end": format_date(end_date, self.__api_date_format__),
-                                "responseTimeZone": self._config.time_zone,
-                                "datapoints": int(self._config.datapoint_id),
-                            },
-                            headers={
-                                "Content-Type": "application/json",
-                                "Authorization": f"Basic {self._config.auth_token}",
-                            },
-                        )
-                        add_to_update = True
-                except possible_errors as err:
-                    self._th_logger.error(
-                        f"Cannot fetch data for '{mtr_hr}' due to the error '{err}'."
-                        " Skipping."
-                    )
-                    continue
+        start_date, *_, end_date = sorted(list(self._missed_hours_queue.keys()))
 
-                file_info = DataFile(
-                    file_name=filename,
+        try:
+            try:
+                data = self._load_from_file(
+                    filename=filename, storage_client=storage_client, logs=logs
+                )
+                add_to_update = False
+            except LoadFromConnectorAPI as err:
+                self._th_logger.info(
+                    f"Canot load the local file due to the reason '{err}'"
+                    " Loading from the IES Mach API"
+                )
+                start_date = truncate(start_date, level="hour")
+                end_date = truncate(end_date, level="hour").add(minutes=59, seconds=59)
+
+                lcl_tmz = self.__api_date_formats__.get(
+                    self._config.time_zone.strip().lower(),
+                    self.__api_default_date_format__,
+                )
+
+                data = self._request_data(
+                    url=self.__fetch_url__,
+                    json_params={
+                        "start": format_date(start_date, lcl_tmz),
+                        "end": format_date(end_date, lcl_tmz),
+                        "responseTimeZone": self._config.time_zone,
+                        "datapoints": int(self._config.datapoint_id),
+                    },
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Basic {self._config.auth_token}",
+                    },
+                )
+                add_to_update = True
+        except possible_errors as err:
+            self._th_logger.error(
+                f"Cannot fetch data for period from '{start_date}' to '{end_date}'"
+                f" due to the error '{err}'. Skipping."
+            )
+            return None
+
+        data_intervals = data[0].get("intervals", [])
+
+        if not bool(len(data_intervals)):
+            self._th_logger.error(
+                f"Recieved empty data for the perion from '{start_date}' to "
+                f"'{end_date}'. Skipping."
+            )
+            return None
+
+        data_df = self._get_data_pl_df(data_intervals)
+        data_df = self._df_map_reduce(data_df)
+
+        file_info = DataFile(
+            file_name=filename,
+            bucket=self._config.extra.raw.bucket,
+            path=self._config.extra.raw.path,
+            body=dumps(data, indent=4, sort_keys=True),
+        )
+        self._shadow_fetched_files_queue.put(file_info)
+        if add_to_update:
+            self._add_to_update(file_info, self._fetch_update_file_buffer)
+
+        data = (
+            data_df.select(
+                [
+                    self.__df_aligned_date_times_col__,
+                    self.__df_aligned_adjusted_date_times_col__,
+                    self.__df_meter_hour_col__,
+                    self.__df_meter_end_hour_col__,
+                    self.__raw_occupancy_col__,
+                ]
+            )
+            .collect()
+            .to_dicts()
+        )
+
+        for rec in data:
+            mtr_hr = rec.get(self.__df_aligned_date_times_col__)
+            mtr_cfgs = self._missed_hours_queue.get(mtr_hr)
+            if mtr_hr and mtr_cfgs:
+                data_file = DataFile(
+                    file_name=rec.get(self.__df_meter_hour_col__),
                     bucket=self._config.extra.raw.bucket,
                     path=self._config.extra.raw.path,
-                    body=dumps(data, indent=4, sort_keys=True),
+                    body=rec,
                     meters=mtr_cfgs,
                 )
-                file_info.timestamps.put(mtr_hr)
+                data_file.timestamps.put(mtr_hr)
+                self._fetched_files_queue.put(data_file)
+            else:
+                self._th_logger.warning(
+                    f"Canot find '{mtr_hr}' in missed hours list. Skipping"
+                )
 
-                self._fetched_files_queue.put(file_info)
-                self._shadow_fetched_files_queue.put(file_info)
-                if add_to_update:
-                    self._add_to_update(file_info, self._fetch_update_file_buffer)
+        return None
 
     def run(self, run_time: DateTime) -> None:
         """Run loop entry point"""
         self.configure(run_time)
+
         self._run_consumers(
             [
                 (self.fetch_consumer, [require_client()]),
+            ],
+            run_parallel=False,
+        )
+
+        self._run_consumers(
+            [
                 (self.save_fetched_files_worker, []),
             ],
             run_parallel=RUN_FETCH_PARALLEL,
@@ -345,64 +573,27 @@ class StandardizeWorker(BaseStandardizeWorker):
     __description__ = "IES Mach Integration"
     __name__ = "IES Mach Standardize Worker"
 
-    def date_repr(self, row):
-        """Get date string reprezentation and timestamp"""
-        data = parse(row.datetime, tz_info="UTC")
-        meter_data = self._adjust_meter_date(data)
-
-        timestamp = int(meter_data.timestamp())
-        hour = format_date(truncate(data, level="hour"), CFG.PROCESSING_DATE_FORMAT)
-        meter_hour = format_date(
-            truncate(meter_data, level="hour"), CFG.PROCESSING_DATE_FORMAT
-        )
-        return Series([timestamp, hour, meter_hour], ["timestamp", "hour", "MeterHour"])
-
-    def _get_data_df(self, data: List) -> DataFrame:
-        if not data or not data[0].get("intervals", {}):
-            raise EmptyDataInterruption("Recieved Empty Data")
-
-        dt_fs = list(map(lambda x: DataFrame.from_dict(x.get("intervals", {})), data))
-
-        raw_df = dt_fs[0] if len(dt_fs) == 0 else concat(dt_fs)
-
-        if not bool(len(raw_df)):
-            raise EmptyDataInterruption(
-                f"Can not load the data '{data}' in a Dataframe"
-            )
-        raw_df.loc[:, ["timestamp", "hour", "MeterHour"]] = raw_df.apply(
-            self.date_repr, axis=1, result_type="expand"
-        )
-        raw_df.sort_values(by=["timestamp"], inplace=True, ascending=False)
-        return raw_df
+    __raw_occupancy_col__ = "Occupancy"
+    __df_aligned_date_times_col__ = "AlignedDates"
+    __df_aligned_adjusted_date_times_col__ = "AlignedAdjustedDates"
+    __df_meter_hour_col__ = "MeterHour"
+    __df_meter_end_hour_col__ = "MeterEndHour"
 
     def _standardize_occupancy(
-        self, data_df: DataFrame, mtr_date: DateTime, mtr_cfg: Dict
+        self, data_row: Dict, mtr_date: DateTime, mtr_cfg: Dict
     ) -> Meter:
         """Standardize electric value"""
-        if not bool(len(data_df)):
-            raise EmptyDataInterruption(
-                f"Recieved Empty Data for the meter point {mtr_date}"
-            )
-
-        start_date = truncate(mtr_date, level="hour")
-        end_date = start_date.add(minutes=59, seconds=59)
-
-        mtr_hr = format_date(start_date, CFG.PROCESSING_DATE_FORMAT)
-
-        # fiter dataframe to operate only with relatad data
-        mtr_df = data_df.loc[data_df.MeterHour == mtr_hr]
-
-        max_timestamp = mtr_df.timestamp.max()
-
-        data_row = mtr_df.loc[mtr_df.timestamp == max_timestamp].to_dict("records")
-
         if not bool(len(data_row)):
             raise EmptyDataInterruption(
                 f"Recieved Empty Data for the meter point {mtr_date}"
             )
 
         def _getter(xdata: List[Dict[str, Any]]) -> Optional[str]:
-            return xdata[0]["value"], start_date, end_date
+            return (
+                xdata.get(self.__raw_occupancy_col__),
+                xdata.get(self.__df_meter_hour_col__),
+                xdata.get(self.__df_meter_end_hour_col__),
+            )
 
         return self._standardize_generic(data_row, mtr_cfg, _getter)
 
@@ -413,17 +604,10 @@ class StandardizeWorker(BaseStandardizeWorker):
             self._th_logger.error("Recived empty standardize data. Skipping")
             return []
 
-        json_data = loads(raw_file_obj.body)
+        raw_data = raw_file_obj.body
 
-        # TODO: Redesign worker to process all meter points in parallel
+        # # TODO: Redesign worker to process all meter points in parallel
         standardized_files = []
-        try:
-            raw_data = self._get_data_df(json_data)
-        except EmptyDataInterruption as err:
-            self._th_logger.error(
-                f"Can not load meter data to a Dataframe due to the err '{err}'"
-            )
-            return []
 
         while not raw_file_obj.timestamps.empty():
             mtr_hr = raw_file_obj.timestamps.get()
@@ -438,7 +622,7 @@ class StandardizeWorker(BaseStandardizeWorker):
 
                 try:
                     meter = stndrdz_func(
-                        data_df=raw_data,
+                        data_row=raw_data,
                         mtr_date=mtr_hr,
                         mtr_cfg=mtr_cfg,
                     )

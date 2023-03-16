@@ -1,6 +1,5 @@
 """Ecostruxture Workers module"""
 
-import math
 import uuid
 from abc import abstractmethod
 from collections import Counter
@@ -10,17 +9,17 @@ from queue import Queue
 from typing import Any, Dict, List, Optional, Set
 
 import openpyxl
+import polars as pl
 from dataclass_factory import Factory, Schema
 from expiringdict import ExpiringDict
 from google.cloud.storage import Client
 from imap_tools import A, MailBox, MailMessageFlags
-from pandas import DataFrame
 from pendulum import DateTime
 
 import common.settings as CFG
 from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
-from common.date_utils import date_range, format_date, parse, truncate
+from common.date_utils import GapDatePeriod, date_range, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.ecostruxture.data_structures import (
@@ -58,11 +57,15 @@ class GapsDetectionWorker(BaseFetchWorker):
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[pl.LazyFrame] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -91,6 +94,7 @@ class GapsDetectionWorker(BaseFetchWorker):
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
+                date_range=self._expected_hours,
             )
             if mtr_msd_poll_hrs:
                 for mtr_hr in mtr_msd_poll_hrs:
@@ -133,15 +137,27 @@ class FetchWorker(BaseFetchWorker):
 
     __mail_root_folder__ = Path("INBOX")
     __mail_processed__ = "ECOSTRUXTURE_PROCESSED"
-    __max_pool_size__ = 50
+    __max_pool_size__ = 20
 
     __sheet_first_value_row__ = 2
     __sheet_date_column__ = 1
 
     __fetch_file_name_tmpl__ = "{base_file_name}_{idx}"
     __sheet_execess_cols__ = (3, 4)
-
     __max_idle_run_count__ = 5
+
+    __raw_consumption_col__ = "RawConsumption"
+    __raw_meter_hour_col__ = "RawDates"
+    __df_timestamp_coll__ = "Timestamp"
+    __df_date_times_col__ = "Dates"
+    __df_aligned_date_times_col__ = "AlignedDates"
+    __df_adjusted_date_times_col__ = "AdjustedDates"
+    __df_aligned_adjusted_date_times_col__ = "AlignedAdjustedDates"
+    __df_meter_hour_col__ = "MeterHour"
+    __df_consumption_col__ = "Consumption"
+
+    __default_meter_date__ = "1970-01-01T00:00"
+    __default_raw_consumption = 0
 
     def __init__(
         self,
@@ -173,6 +189,8 @@ class FetchWorker(BaseFetchWorker):
             default_schema=Schema(trim_trailing_underscore=False, skip_internal=False)
         )
 
+        self._allowed_sheet_names: Optional[Set] = None
+
     def configure(self, run_time: DateTime) -> None:
         super().configure(run_time=run_time)
         self._clear_queue(self._fetched_atachments_q)
@@ -180,6 +198,7 @@ class FetchWorker(BaseFetchWorker):
         self._clear_queue(self._skipped_messages_q)
         self._fetch_counter.clear()
         self._base_name = format_date(self._run_time, CFG.PROCESSING_DATE_FORMAT)
+        self._allowed_sheet_names = set(self._config.meters_sheet_mapper.values())
 
     def _get_mail_connection(self) -> MailBox:
         return MailBox(self._config.host).login(
@@ -297,6 +316,223 @@ class FetchWorker(BaseFetchWorker):
                 )
                 self._clear_queue(self._skipped_messages_q)
 
+    def __df_rename_columns(self, data_df: pl.LazyFrame) -> pl.LazyFrame:
+        return data_df.lazy().rename(
+            {
+                "column_0": self.__raw_meter_hour_col__,
+                "column_1": self.__raw_consumption_col__,
+            }
+        )
+
+    @staticmethod
+    def __df_set_date_type(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: parse(y, tz_info="UTC"))).alias(dest_col)
+        )
+
+    def __df_adjust_dates(
+        self, data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(self._adjust_meter_date)).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_truncate_dates(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str, level: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: truncate(y, level=level))).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_get_timestamp(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(date_col).apply(lambda y: int(y.timestamp()))).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_get_meter_hour(
+        data_df: pl.LazyFrame, date_col: str, dest_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (
+                pl.col(date_col).apply(
+                    lambda y: format_date(y, CFG.PROCESSING_DATE_FORMAT)
+                )
+            ).alias(dest_col)
+        )
+
+    @staticmethod
+    def __df_remove_dublicates(data_df: pl.LazyFrame) -> pl.LazyFrame:
+        return data_df.lazy().unique()
+
+    @staticmethod
+    def __df_remove_nulls(data_df: pl.LazyFrame, columns: List[str]) -> pl.LazyFrame:
+        return data_df.lazy().filter(pl.col(columns).is_null().is_not())
+
+    @staticmethod
+    def __df_fill_nulls(data_df: pl.LazyFrame, column: str, value: Any) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            pl.col(column).fill_null(
+                pl.lit(value),
+            ),
+        )
+
+    @staticmethod
+    def __df_set_type_inline(
+        data_df: pl.LazyFrame, column: str, pl_type: Any
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            pl.col(column).cast(pl_type, strict=False).keep_name()
+        )
+
+    def _get_data_pl_df(self, data: Any) -> pl.LazyFrame:
+        if not data:
+            raise EmptyDataInterruption("Recieved Empty Data")
+
+        sheet_data = data.values
+        next(sheet_data)[0:]  # pylint:disable=expression-not-assigned
+        mtr_df = pl.DataFrame(sheet_data).lazy()
+
+        return (
+            mtr_df.pipe(self.__df_rename_columns)
+            .pipe(self.__df_remove_dublicates)
+            .pipe(
+                self.__df_fill_nulls,
+                self.__raw_meter_hour_col__,
+                self.__default_meter_date__,
+            )
+            .pipe(self.__df_set_type_inline, self.__raw_consumption_col__, pl.Float64)
+            .pipe(
+                self.__df_fill_nulls,
+                self.__raw_consumption_col__,
+                self.__default_raw_consumption,
+            )
+            .pipe(self.__df_remove_dublicates)
+            .pipe(
+                self.__df_remove_nulls,
+                [self.__raw_consumption_col__, self.__raw_meter_hour_col__],
+            )
+            .pipe(
+                self.__df_set_date_type,
+                self.__raw_meter_hour_col__,
+                self.__df_date_times_col__,
+            )
+            .pipe(
+                self.__df_adjust_dates,
+                self.__df_date_times_col__,
+                self.__df_adjusted_date_times_col__,
+            )
+            .pipe(
+                self.__df_truncate_dates,
+                self.__df_date_times_col__,
+                self.__df_aligned_date_times_col__,
+                "hour",
+            )
+            .pipe(
+                self.__df_truncate_dates,
+                self.__df_adjusted_date_times_col__,
+                self.__df_aligned_adjusted_date_times_col__,
+                "hour",
+            )
+            .pipe(
+                self.__df_get_meter_hour,
+                self.__df_aligned_adjusted_date_times_col__,
+                self.__df_meter_hour_col__,
+            )
+            .pipe(
+                self.__df_get_timestamp,
+                self.__df_adjusted_date_times_col__,
+                self.__df_timestamp_coll__,
+            )
+            .sort([self.__df_timestamp_coll__])
+        )
+
+    @staticmethod
+    def __df_min_inline(
+        data_df: pl.LazyFrame, data_col: str, group_col: str, suffix: str = "_min"
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(data_col).min().over(group_col).suffix(suffix))
+        )
+
+    @staticmethod
+    def __df_max_inline(
+        data_df: pl.LazyFrame, data_col: str, group_col: str, suffix: str = "_max"
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(data_col).max().over(group_col).suffix(suffix))
+        )
+
+    @staticmethod
+    def __df_max_inline(
+        data_df: pl.LazyFrame, data_col: str, group_col: str, suffix: str = "_max"
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            (pl.col(data_col).max().over(group_col).suffix(suffix))
+        )
+
+    @staticmethod
+    def __df_difference_inline(
+        data_df: pl.LazyFrame, minuend_col: str, subtrahend_col: str, res_col: str
+    ) -> pl.LazyFrame:
+        return data_df.lazy().with_columns(
+            ((pl.col(minuend_col) - pl.col(subtrahend_col)).alias(res_col))
+        )
+
+    def _get_consumption_pl_df(self, data_df: pl.LazyFrame) -> pl.LazyFrame:
+
+        # For debug purpose we need to store all data in df for some period.
+        # TODO: @ todo After some probation period shoulbe chaged to
+        # return data_df.groupby("MeterHour").agg(
+        #   pl.col("RawConsumption").max() - pl.col("RawConsumption").min()
+        # ).collect()
+
+        return (
+            data_df.pipe(
+                self.__df_min_inline,
+                self.__raw_consumption_col__,
+                self.__df_meter_hour_col__,
+            )
+            .pipe(
+                self.__df_max_inline,
+                self.__raw_consumption_col__,
+                self.__df_meter_hour_col__,
+            )
+            .pipe(
+                self.__df_difference_inline,
+                f"{self.__raw_consumption_col__}_max",
+                f"{self.__raw_consumption_col__}_min",
+                self.__df_consumption_col__,
+            )
+        )
+
+    def _get_workbook_idx(self, workbook: Any) -> Dict:
+        sheets_idx = {}
+
+        for sheet_name in workbook.sheetnames:
+            if sheet_name not in self._allowed_sheet_names:
+                self._th_logger.warning(f"Found unexpected sheet '{sheet_name}'. Skip")
+                continue
+            sheet = workbook.get_sheet_by_name(sheet_name)
+            sheet.delete_cols(*self.__sheet_execess_cols__)
+            try:
+                raw_data_df = self._get_data_pl_df(sheet)
+                raw_data_df = self._get_consumption_pl_df(raw_data_df)
+            except EmptyDataInterruption as err:
+                self._th_logger.error(
+                    f"Can not load meter data to a Dataframe due to the err '{err}'"
+                )
+                continue
+            else:
+                sheets_idx[sheet_name] = raw_data_df
+        return sheets_idx
+
     def unbundle_fetch_data_consumer(
         self,
         logs: Queue,  # pylint:disable=unused-argument
@@ -338,6 +574,7 @@ class FetchWorker(BaseFetchWorker):
                 )
                 self._shadow_fetched_files_queue.put(file_info)
                 self._add_to_update(file_info, self._fetch_update_file_buffer)
+                sheets_idx = self._get_workbook_idx(mtr_wb)
 
                 for mtr_hr in hours:
                     with self._lock:
@@ -346,7 +583,7 @@ class FetchWorker(BaseFetchWorker):
                     for mtr_cfg in mtr_cfgs:
                         mt_name = Path(mtr_cfg.meter_name).stem
                         sheet_name = self._config.meters_sheet_mapper.get(mt_name, "")
-                        if not sheet_name or sheet_name not in mtr_wb.sheetnames:
+                        if not sheet_name or sheet_name not in sheets_idx:
                             self._th_logger.warning(
                                 f"Cannot find sheet '{sheet_name}' related "
                                 f"to meter '{mt_name}' in gs://"
@@ -354,14 +591,12 @@ class FetchWorker(BaseFetchWorker):
                                 f"{self._config.extra.raw.path}/{filename}"
                             )
                             continue
-                        sheet = mtr_wb.get_sheet_by_name(sheet_name)
-                        sheet.delete_cols(*self.__sheet_execess_cols__)
 
                         data_file = DataFile(
                             file_name=filename,
                             bucket=self._config.extra.raw.bucket,
                             path=self._config.extra.raw.path,
-                            body=sheet,
+                            body=sheets_idx[sheet_name].collect(),
                         )
                         data_file.timestamps.put(mtr_hr)
                         data_file.meters.put(mtr_cfg)
@@ -404,42 +639,11 @@ class StandardizeWorker(BaseStandardizeWorker):
     __description__ = "IES Mach Integration"
     __name__ = "IES Mach Standardize Worker"
 
-    def date_repr(self, row):
-        """Get date string reprezentation and timestamp"""
-        data = parse(row.Date, tz_info="UTC")
-        data_hr = truncate(data, level="hour")
-
-        meter_data = self._adjust_meter_date(data)
-        meter_data_hr = truncate(meter_data, level="hour")
-
-        row["Hours"] = format_date(data_hr, CFG.PROCESSING_DATE_FORMAT)
-        row["MeterHours"] = format_date(meter_data_hr, CFG.PROCESSING_DATE_FORMAT)
-
-        row["timestamp"] = int(meter_data.timestamp())
-        return row
-
-    def _get_data_df(self, data: Any) -> DataFrame:
-        if not data:
-            raise EmptyDataInterruption("Recieved Empty Data")
-
-        sheet_data = data.values
-        columns = next(sheet_data)[0:]
-        raw_df = DataFrame(sheet_data, columns=columns)
-        raw_df.drop_duplicates()
-        raw_df.rename(
-            columns={"Timestamp": "Date", "Total kWH": "RawConsumption"}, inplace=True
-        )
-        raw_df = raw_df.apply(self.date_repr, axis=1)
-        raw_df.sort_values(by=["timestamp"], inplace=True, ascending=False)
-        return raw_df
-
-    @staticmethod
-    def __calc_consumption(row):
-        row["Consumption"] = math.fabs(row.endConsumption - row.startConsumption)
-        return row
+    __df_meter_hour_col__ = "MeterHour"
+    __df_consumption_col__ = "Consumption"
 
     def _standardize_electric(
-        self, data_df: DataFrame, mtr_date: DateTime, mtr_cfg: Dict
+        self, data_df: pl.DataFrame(), mtr_date: DateTime, mtr_cfg: Dict
     ) -> Meter:
         """Standardize electric value"""
         if not bool(len(data_df)):
@@ -451,48 +655,35 @@ class StandardizeWorker(BaseStandardizeWorker):
         end_date = start_date.add(minutes=59, seconds=59)
 
         mtr_date = self._adjust_meter_date(start_date)
-        mtr_hr = format(mtr_date, CFG.PROCESSING_DATE_FORMAT)
+        mtr_hr = format_date(mtr_date, CFG.PROCESSING_DATE_FORMAT)
 
-        mtr_df = data_df[data_df.MeterHours == mtr_hr]
-
-        if not bool(len(mtr_df)):
-            raise EmptyDataInterruption(
-                f"Cannot fine data related to the meter '{mtr_cfg.meter_name}' "
-                f"point '{mtr_hr}'"
+        try:
+            consumption = data_df.filter(pl.col(self.__df_meter_hour_col__) == mtr_hr)[
+                self.__df_consumption_col__
+            ][0]
+        except pl.exceptions.ComputeError:
+            raise EmptyDataInterruption(  # pylint:disable=raise-missing-from
+                f"Data Frame of '{mtr_cfg.meter_name}' does not contain data for "
+                f"'{mtr_hr}' point"
             )
 
-        mtr_df = (
-            mtr_df.groupby(["MeterHours"])["RawConsumption"]
-            .agg(["min", "max"])
-            .reset_index()
-        )
-        mtr_df.rename(
-            columns={"min": "startConsumption", "max": "endConsumption"}, inplace=True
-        )
+        def _getter(
+            xdata: List[Dict[str, Any]]
+        ) -> Optional[str]:  # pylint:disable=unused-argument
+            return consumption, start_date, end_date
 
-        mtr_df = mtr_df.apply(self.__calc_consumption, axis=1)
-
-        if not bool(len(mtr_df)):
-            raise EmptyDataInterruption(
-                f"Cannot find The meter '{mtr_cfg.meter_name}' point {mtr_hr}"
-            )
-
-        def _getter(xdata: List[Dict[str, Any]]) -> Optional[str]:
-            return xdata[0]["Consumption"], start_date, end_date
-
-        return self._standardize_generic(mtr_df.to_dict("records"), mtr_cfg, _getter)
+        return self._standardize_generic([], mtr_cfg, _getter)
 
     def _standardize(self, raw_file_obj: DataFile) -> List[DataFile]:
         """Standardize the given raw file"""
 
-        if not raw_file_obj.body:
-            self._th_logger.error("Recived empty standardize data. Skipping")
-            return []
-
         # TODO: Redesign worker to process all meter points in parallel
         standardized_files = []
         try:
-            raw_data = self._get_data_df(raw_file_obj.body)
+            raw_data_df = raw_file_obj.body
+            if not bool(len(raw_data_df)):
+                self._th_logger.error("Recived empty standardize data. Skipping")
+                return []
         except EmptyDataInterruption as err:
             self._th_logger.error(
                 f"Can not load meter data to a Dataframe due to the err '{err}'"
@@ -512,7 +703,7 @@ class StandardizeWorker(BaseStandardizeWorker):
 
                 try:
                     meter = stndrdz_func(
-                        data_df=raw_data,
+                        data_df=raw_data_df,
                         mtr_date=mtr_hr,
                         mtr_cfg=mtr_cfg,
                     )
@@ -541,7 +732,6 @@ class StandardizeWorker(BaseStandardizeWorker):
     def run(self, run_time: DateTime) -> None:
         """Run loop entrypoint"""
         self.configure(run_time)
-
         self._run_consumers(
             [
                 (self.run_standardize_worker, []),

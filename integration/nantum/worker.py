@@ -24,10 +24,7 @@ from pandas import DataFrame
 from pendulum import DateTime
 
 from common import settings as CFG
-from common.bucket_helpers import (
-    get_missed_standardized_files,
-    require_client,
-)
+from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
 from common.date_utils import date_range, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
@@ -117,9 +114,9 @@ class GapsDetectionWorker(BaseFetchWorker):
                 self._th_logger.info(f"Meter {mtr_cfg.meter_name} is up to date.")
             self._meters_queue.task_done()
 
-    def run(self, start_date: DateTime) -> None:
+    def run(self, start_date: DateTime, run_time: DateTime) -> None:
         """Run loop entrypoint"""
-        self.configure(self._run_time)
+        self.configure(run_time)
         self._run_consumers(
             [(self.missed_hours_consumer, [require_client(), start_date])],
             run_parallel=RUN_GAPS_PARALLEL,

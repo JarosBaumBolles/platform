@@ -1,21 +1,15 @@
 """Density integration"""
 import base64
 import uuid
-from collections import Counter
-from json import JSONDecodeError, dumps, load
+from json import dumps, load
 from pathlib import Path
 from queue import Queue
 from typing import Optional
-
-from dataclass_factory import Factory
-from expiringdict import ExpiringDict
-
 from common import settings as CFG
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from integration.base_integration import BasePullConnector
 from integration.density.config import DensityCfg
-from integration.density.exception import MalformedConfig
 from integration.density.workers import (
     FetchWorker,
     GapsDetectionWorker,
@@ -29,59 +23,26 @@ class DensityConnector(BasePullConnector):
     __created_by__ = "Density Connector"
     __description__ = "Density Integration"
     __name__ = "Density Connector"
-    # __fetch_url__ = "https://api.density.io/v2/spaces/{}/counts"
-
-    DENSITY_API_DATE_FORMAT = "YYYY-MM-DD[T]HH:mm:ss[Z]"
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
-        self._factory = Factory()
-
-        self._missed_hours = ExpiringDict(max_len=2000, max_age_seconds=3600)
         self._config: Optional[DensityCfg] = None
-
         self._gaps_worker: Optional[GapsDetectionWorker] = None
-
-        # TODO: SHOULD be moved to the BasePullConnector and propagated to
-        # the other pull integrations
-
-        self._fetched_files_q: Queue = Queue()
-        self._fetch_update_q: Queue = Queue()
         self._fetch_worker: Optional[FetchWorker] = None
-
-        self._standardized_files: Queue = Queue()
-        self._standardized_update_files: Queue = Queue()
-        self._standardized_files_count: Counter = Counter()
         self._standardize_worker: Optional[StandardizeWorker] = None
+
+        # TODO: Should be removed  after Coned moving to the new approach
+        # and final refactoring
+        self._standardized_files: Queue = Queue()
 
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            try:
-                js_config = self._before_configuration(data)
-                if not js_config:
-                    raise MalformedConfig("Recieved Malformed configuration JSON")
-
-                self._config = self._factory.load(js_config, DensityCfg)
-            except (ValueError, TypeError, JSONDecodeError) as err:
-                raise MalformedConfig from err
-
-            self._gaps_worker = GapsDetectionWorker(
-                missed_hours_cache=self._missed_hours, config=self._config
-            )
-
-            self._fetch_worker = FetchWorker(
-                missed_hours=self._missed_hours,
-                fetched_files=self._fetched_files_q,
-                fetch_update=self._fetch_update_q,
-                config=self._config,
-            )
-
-            self._standardize_worker = StandardizeWorker(
-                raw_files=self._fetched_files_q,
-                standardized_files=self._standardized_files,
-                standardize_update=self._standardized_update_files,
-                config=self._config,
+            self._config = self._config_factory(data, DensityCfg)
+            self._configure_workers(
+                gaps_cls=GapsDetectionWorker,
+                fetch_cls=FetchWorker,
+                standardize_cls=StandardizeWorker,
             )
 
         self._logger.debug(
@@ -93,70 +54,13 @@ class DensityConnector(BasePullConnector):
             },
         )
 
-    def get_missed_hours(self) -> None:
-        """Get list of missed hours"""
-        # Standardized data stored separately by type meter. It means that it
-        # possible to miss different hours for each meter in a list.
-        # As the result we need to check each given meter for misssed hour
-        # and build index (relation) between missed hour and related meters
-
-        self._logger.info("Matching missed hour.")
-
-        with elapsed_timer() as elapsed:
-            self._gaps_worker.run(self._run_time)
-
-        self._logger.debug(
-            "Matched missed hour.", extra={"labels": {"elapsed_time": elapsed()}}
-        )
-
-    # TODO: @todo Redesign. Move to base class
-    def fetch(self) -> None:
-        with elapsed_timer() as ellapsed:
-            self._logger.info("Fetching data.")
-            self._fetch_data()
-            self._logger.debug(
-                "Fetched missed hours.", extra={"labels": {"elapsed_time": ellapsed()}}
-            )
-
-    def _fetch_data(self) -> None:
-        """Integration Fetch logic"""
-        self._logger.info(f"Fetching `{self.__name__}` data")
-
-        if self._fetch_worker is None:
-            self._logger.error("The 'configure' method must be run before. Complete.")
-        else:
-            self._fetch_worker.run(self._run_time)
-
-    # TODO: @todo Candidate to be in a base class
-    def standardize(self) -> None:
-        with elapsed_timer() as elapsed:
-            self._logger.info("Start standardizing of fetched data.")
-            if self._standardize_worker is None:
-                self._logger.error(
-                    "The 'configure' method must be run before. Complete."
-                )
-                return None
-            self._standardize_worker.run(self._run_time)
-
-            self._logger.info(
-                "Completed data standardization.",
-                extra={"labels": {"elapsed_time": elapsed()}},
-            )
-        return None
-
-    def run(self):
-        super().run()
-        self.get_missed_hours()
-        self.fetch()
-        self.standardize()
-
 
 def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""
     main_logger = Logger(
-        name="Wattime run",
+        name="Density run",
         level="DEBUG",
-        description="Wattime run",
+        description="density run",
         trace_id=uuid.uuid4(),
     )
     with elapsed_timer() as elapsed:

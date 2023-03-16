@@ -1,5 +1,6 @@
 """ Backend logic for ConEd authentication flow. """
 
+# Standard imports
 import datetime
 import json
 import logging
@@ -7,10 +8,12 @@ import uuid
 import xml.etree.ElementTree as ET
 from re import finditer
 from urllib.parse import parse_qs
-from xml.sax.saxutils import escape
+from urllib.error import HTTPError
 
+# Third-party imports
 from flask import abort
 
+# Project imports
 from common.bucket_helpers import get_file_contents, upload_file
 from common.logging import Logger
 from common.request_helpers import HTTPRequestMethod, PayloadType, http_request
@@ -19,6 +22,7 @@ from common.settings import (
     CONED_CLIENT_SECRET as CLIENT_SECRET,
     CONED_SUBSCRIPTION_KEY as SUBSCRIPTION_KEY
 )
+
 
 DOMAIN = "https://hourlybuildingdata.com"
 
@@ -255,6 +259,7 @@ def main(request):
                 "ocp-apim-subscription-key": SUBSCRIPTION_KEY,
                 "Content-Type": "application/json",
             }
+            logger.debug(str(headers))
             api_response = http_request(
                 "https://api.coned.com/gbc/v1/oauth/v1/Token",
                 payload=payload,
@@ -280,8 +285,8 @@ def main(request):
             )
 
             response.append("[OK]: Auth data is valid")
-        except:  # pylint:disable=bare-except
-            return "[ERROR]: Either refresh token or subscription ID is invalid"
+        except HTTPError as error:
+            return f"[ERROR]: Either refresh token or subscription ID is invalid. Received code: {error.code}, with message: {error.reason}"
 
         root = ET.fromstring(usage_points_response)
         response.append("USAGE POINTS:")

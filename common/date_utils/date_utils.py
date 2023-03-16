@@ -1,19 +1,20 @@
 """Common utils to work with dates"""
 import uuid
+from copy import deepcopy
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Optional, Tuple, Union
+
 import pendulum as pdl
+import polars as pl
 import pytz
 from pendulum.datetime import DateTime
 from pendulum.tz.timezone import FixedTimezone, Timezone
-from common.cache import lru_cache_expiring
-from common.date_utils.constants import (
-    DEFAULT_LOCAL_TIMEZONE,
-    SIXTY,
-)
-from common.logging import Logger
+
 from common import settings as CFG
+from common.cache import lru_cache_expiring
+from common.date_utils.constants import DEFAULT_LOCAL_TIMEZONE, SIXTY
+from common.logging import Logger
 
 LOGGER = Logger(
     name="Date Utils",
@@ -437,6 +438,114 @@ def humanize_seconds(value: Union[str, int, Decimal]) -> Union[time, timedelta]:
     if hours > 23:
         return timedelta(hours=hours, minutes=minutes, seconds=seconds, milliseconds=0)
     return time(hours, minutes, seconds, 0)
+
+
+class GapDatePeriod:
+    """Polaris based Date Period implementation"""
+
+    __date_kwargs = {
+        "years": 0,
+        "months": 0,
+        "weeks": 0,
+        "days": 0,
+        "hours": 0,
+        "minutes": 0,
+        "seconds": 0,
+        "microseconds": 0,
+    }
+
+    __dates_column__ = "dates"
+    __timestamp_column__ = "timestamp"
+    __max_timestamp_column__ = "end_timestamp"
+    __min_timestamp_column__ = "start_timestamp"
+
+    def __init__(
+        self,
+        end_date: DateTime,
+        amount: int,
+        level: str = "hour",
+        range_level: str = "hours",
+    ) -> None:
+        self._end_date = truncate(end_date, level=level)
+        self._start_date = self._get_start_date(
+            end_date=self._end_date, amount=amount, level=range_level
+        )
+        self._range_level = range_level
+        self._range_df = self._get_data_frame()
+
+    def _get_start_date(self, end_date: DateTime, amount: int, level: str) -> DateTime:
+        kwargs = deepcopy(self.__date_kwargs)
+        kwargs[level] = amount
+        return end_date.subtract(**kwargs)
+
+    @staticmethod
+    def _get_date_str(
+        frame: pl.LazyFrame,
+        date_cl: str,
+        dest_column: str,
+        date_format: str = CFG.PROCESSING_DATE_FORMAT,
+    ) -> pl.LazyFrame:
+        return frame.lazy().with_columns(
+            (
+                pl.col(date_cl)
+                .apply(lambda x: format_date(x, date_format))
+                .alias(dest_column)
+            )
+        )
+
+    @staticmethod
+    def _get_timestamp(
+        frame: pl.LazyFrame, date_cl: str, timestamp_cl: str
+    ) -> pl.LazyFrame:
+        return frame.lazy().with_columns(
+            (pl.col(date_cl).apply(lambda x: int(x.timestamp())).alias(timestamp_cl))
+        )
+
+    @staticmethod
+    def _get_max_timestamp(
+        frame: pl.LazyFrame, timestamp_col: str, max_col: str
+    ) -> pl.LazyFrame:
+        return frame.lazy().with_column((pl.col(timestamp_col).max()).alias(max_col))
+
+    @staticmethod
+    def _get_min_timestamp(
+        frame: pl.LazyFrame, timestamp_col: str, min_col: str
+    ) -> pl.LazyFrame:
+        return frame.lazy().with_column((pl.col(timestamp_col).max()).alias(min_col))
+
+    def _get_data_frame(self) -> pl.LazyFrame:
+        dt_range = date_range(
+            start_date=self._start_date,
+            end_date=self._end_date,
+            range_unit=self._range_level,
+        )
+
+        range_df = pl.DataFrame(dict([(self.__dates_column__, list(dt_range))])).lazy()
+
+        range_df = (
+            range_df.lazy()
+            .pipe(self._get_date_str, "dates", "hours")
+            .pipe(self._get_timestamp, "dates", "timestamp")
+            .pipe(self._get_max_timestamp, "timestamp", "end_time")
+            .pipe(self._get_min_timestamp, "timestamp", "start_time")
+        )
+
+        return range_df
+
+    @property
+    def start_date(self):
+        """Range start date"""
+        return self._start_date
+
+    @property
+    def end_date(self):
+        """Range end date"""
+        return self._end_date
+
+    @property
+    def range(self) -> pl.LazyFrame:
+        """Range dataframe"""
+        return self._range_df
 
 
 if __name__ == "__main__":

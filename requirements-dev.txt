@@ -6,3 +6,4 @@ mccabe
 urllib3==1.25.9
 requests==2.26.0
 google_auth_oauthlib==0.5.1
+pyinstrument==4.4.0

@@ -16,6 +16,7 @@ from common.date_utils.date_utils import (
     parse,
     parse_timezone,
     truncate,
+    GapDatePeriod
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "date_range_in_past",
     "date_range",
     "truncate",
+    "GapDatePeriod"
 ]

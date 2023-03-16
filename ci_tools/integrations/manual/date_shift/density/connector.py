@@ -1,27 +1,35 @@
-""" Standardization phase - validation and normalization happens here. """
+"""Density integration"""
 import base64
 import uuid
 from json import dumps, load
+from pathlib import Path
 from queue import Queue
 from typing import Optional
-import common.settings as CFG
+
+from ci_tools.integrations.manual.date_shift.base.workers import (
+    FetchWorker,
+    GapsDetectionWorker,
+    StandardizeWorker,
+)
+from common import settings as CFG
+from common.date_utils import parse
 from common.elapsed_time import elapsed_timer
 from common.logging import Logger
 from integration.base_integration import BasePullConnector
-from integration.facit.config import FacitCfg
-from integration.facit.workers import FetchWorker, StandardizeWorker
+from integration.density.config import DensityCfg
 
 
-class Connector(BasePullConnector):
-    "Facit Integration"
+class DensityConnector(BasePullConnector):
+    """Density Integration"""
 
-    __created_by__ = "Facit Connector"
-    __description__ = "Facit Integration"
-    __name__ = "Facit Connector"
+    __created_by__ = "Density Connector"
+    __description__ = "Density Integration"
+    __name__ = "Density Connector"
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
-        self._config: Optional[FacitCfg] = None
+        self._config: Optional[DensityCfg] = None
+        self._gaps_worker: Optional[GapsDetectionWorker] = None
         self._fetch_worker: Optional[FetchWorker] = None
         self._standardize_worker: Optional[StandardizeWorker] = None
 
@@ -32,9 +40,11 @@ class Connector(BasePullConnector):
     def configure(self, data: bytes) -> None:
         self._logger.debug("Loading configuration.")
         with elapsed_timer() as elapsed:
-            self._config = self._config_factory(data, FacitCfg)
+            self._config = self._config_factory(data, DensityCfg)
             self._configure_workers(
-                fetch_cls=FetchWorker, standardize_cls=StandardizeWorker
+                gaps_cls=GapsDetectionWorker,
+                fetch_cls=FetchWorker,
+                standardize_cls=StandardizeWorker,
             )
 
         self._logger.debug(
@@ -46,36 +56,41 @@ class Connector(BasePullConnector):
             },
         )
 
+    def run(self, **kwargs):
+        self._run_time = parse(tz_info=self.env_tz_info)
+        self.fetch()
+        self.standardize()
 
-def main(event, context) -> None:  # pylint: disable=unused-argument
+
+def main(event, context):  # pylint:disable=unused-argument
     """Entry point"""
-    connector_name = "facit"
     main_logger = Logger(
-        name=f"{connector_name} run",
+        name="Density run",
         level="DEBUG",
-        description=f"{connector_name}",
+        description="density run",
         trace_id=uuid.uuid4(),
     )
-    main_logger.info(f"Running {connector_name} connector")
-    connector = Connector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
-    connector.configure(event)
-    connector.run(run_gaps_check=False)
+    with elapsed_timer() as elapsed:
+        connector = DensityConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
+        connector.configure(event)
+        connector.run()
+        main_logger.info("Completed.", extra={"labels": {"elapsed_time": elapsed()}})
 
 
 if __name__ == "__main__":
-    CONNECTOR_NAME = "facit"
-    METERS_AMOUNT = 1
-
+    CONNECTOR_NAME = "density"
+    METERS_AMOUNT = 4
     debug_logger = Logger(
         name="debug",
         level="DEBUG",
-        description=f"{CONNECTOR_NAME} DEBUG",
+        description="DENSITY DEBUG",
         trace_id=uuid.uuid4(),
     )
-    debug_logger.info(f"Running {CONNECTOR_NAME} integrations")
+    debug_logger.info("Running DENSITY integrations")
+
     import debugpy
 
-    debugpy.listen(CFG.DEBUG_PORT)
+    debugpy.listen(5678)
     debugpy.wait_for_client()  # blocks execution until client is attached
     debugpy.breakpoint()
 
@@ -86,7 +101,7 @@ if __name__ == "__main__":
                     f"participant_payload_{participant_id}_connector_"
                     f"{CONNECTOR_NAME}_{fl_idx}.json"
                 )
-                if not payload_file.exists():
+                if not Path(payload_file).exists():
                     debug_logger.warning(
                         f"Payload file '{payload_file}' does not exists. Skipping"
                     )
@@ -98,6 +113,7 @@ if __name__ == "__main__":
                 json_config = dumps(cfg).encode("utf-8")
                 event_sample = {"data": base64.b64encode(json_config)}
                 main(event=event_sample, context=None)
-        debug_logger.info(
-            "Completed integration", extra={"labels": {"elapsed_time": dbg_elapsed()}}
-        )
+            debug_logger.info(
+                "Completed integration",
+                extra={"labels": {"elapsed_time": dbg_elapsed()}},
+            )
