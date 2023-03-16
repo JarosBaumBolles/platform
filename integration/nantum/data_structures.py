@@ -1,23 +1,8 @@
 """Configuration of Integration."""
 from dataclasses import dataclass, field
 from queue import Queue
-from typing import Any, Dict, List, Optional
-
-from pendulum import DateTime
-
+from typing import Any, List, Optional
 from common.data_representation.standardized import Meter
-from integration.nantum.config import MeterCfg
-
-
-@dataclass
-class FetchPayload:
-    """Fetch request hour data"""
-
-    file_name: str = ""
-    meter_cfg: Optional[MeterCfg] = None
-    meters_hours: Optional[Dict[DateTime, List[DateTime]]] = None
-    start_date: Optional[DateTime] = None
-    end_date: Optional[DateTime] = None
 
 
 @dataclass

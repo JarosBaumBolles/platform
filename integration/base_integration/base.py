@@ -78,7 +78,7 @@ class BaseAbstractConnnector:
         self.env_tz_info = parse_timezone(env_tz_info)
         self._run_time: Optional[DateTime] = None
 
-    def run(self) -> None:
+    def run(self, **kwargs) -> None:  # pylint:disable=unused-argument
         """Run loop entrypoint"""
         self._run_time = parse(tz_info=self.env_tz_info)
 
@@ -285,25 +285,32 @@ class BaseConnector(BaseAbstractConnnector):
             return config
 
     def _configure_workers(
-        self, gaps_cls: type, fetch_cls: type, standardize_cls: type
+        self,
+        gaps_cls: Optional[type] = None,
+        fetch_cls: Optional[type] = None,
+        standardize_cls: Optional[type] = None,
     ) -> None:
-        self._gaps_worker = gaps_cls(
-            missed_hours_cache=self._missed_hours, config=self._config
-        )
 
-        self._fetch_worker = fetch_cls(
-            missed_hours=self._missed_hours,
-            fetched_files=self._fetched_files_q,
-            fetch_update=self._fetch_update_q,
-            config=self._config,
-        )
+        if gaps_cls is not None:
+            self._gaps_worker = gaps_cls(
+                missed_hours_cache=self._missed_hours, config=self._config
+            )
 
-        self._standardize_worker = standardize_cls(
-            raw_files=self._fetched_files_q,
-            standardized_files=self._standardized_files,
-            standardize_update=self._standardized_update_files,
-            config=self._config,
-        )
+        if fetch_cls is not None:
+            self._fetch_worker = fetch_cls(
+                missed_hours=self._missed_hours,
+                fetched_files=self._fetched_files_q,
+                fetch_update=self._fetch_update_q,
+                config=self._config,
+            )
+
+        if standardize_cls is not None:
+            self._standardize_worker = standardize_cls(
+                raw_files=self._fetched_files_q,
+                standardized_files=self._standardized_files,
+                standardize_update=self._standardized_update_files,
+                config=self._config,
+            )
 
     def get_missed_hours(self) -> None:
         """Get list of missed hours"""
@@ -313,7 +320,6 @@ class BaseConnector(BaseAbstractConnnector):
         # and build index (relation) between missedd hour and related meters
 
         self._logger.info("Matching missed hour.")
-
         with elapsed_timer() as elapsed:
             self._gaps_worker.run(self._run_time)
 
@@ -356,13 +362,17 @@ class BaseConnector(BaseAbstractConnnector):
                 "Completed data standardization.",
                 extra={"labels": {"elapsed_time": elapsed()}},
             )
+
         return None
 
-    def run(self):
+    def run(self, **kwargs) -> None:
         super().run()
-        self.get_missed_hours()
-        self.fetch()
-        self.standardize()
+        if kwargs.get("run_gaps_check", True):
+            self.get_missed_hours()
+        if kwargs.get("run_fetch", True):
+            self.fetch()
+        if kwargs.get("run_standardize", True):
+            self.standardize()
 
 
 class BasePushConnector(BaseConnector):
@@ -1127,11 +1137,3 @@ class BasePullConnector(BaseConnector):
     @abstractmethod
     def configure(self, data: bytes) -> None:
         pass
-
-    # @abstractmethod
-    # def standardize(self) -> None:
-    #     """Standardize Fetched Data"""
-
-    # @abstractmethod
-    # def fetch(self) -> Any:
-    #     """Fetch data from data source"""

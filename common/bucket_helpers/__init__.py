@@ -1,5 +1,5 @@
-"""
-This package has all helper logic related to bucket operations, including fetching and saving data.
+""" This package has all helper logic related to bucket operations,
+including fetching and saving data.
 """
 
 import uuid
@@ -7,13 +7,21 @@ from datetime import datetime, timedelta
 from json import loads
 from os import path
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
+import pandas as pd
+import polars as pl
 from google.cloud.storage import Blob, Bucket, Client
 from pendulum import DateTime
 
 from common.cache import lru_cache_expiring
-from common.date_utils import date_range_in_past, format_date, parse, truncate
+from common.date_utils import (
+    GapDatePeriod,
+    date_range_in_past,
+    format_date,
+    parse,
+    truncate,
+)
 from common.logging import Logger
 from common.settings import PROCESSING_DATE_FORMAT
 
@@ -128,13 +136,37 @@ def get_configuration(bucket_name, integration):
     ]
 
 
+def __df_get_blob_path(blb_df, src_column: str, dest_column: str):
+    return blb_df.lazy().with_columns(
+        [(pl.col(src_column).apply(lambda x: Path(x.name))).alias(dest_column)]
+    )
+
+
+def __df_drop_nested(blb_df, column: str, value: Any):
+    return blb_df.lazy().filter(pl.col(column).apply(lambda x: x.parent == value))
+
+
+def __df_meter_hours_str(blb_df, src_column: str, dest_column: str):
+    return blb_df.lazy().with_columns(
+        [(pl.col(src_column).apply(lambda x: str(x.name))).alias(dest_column)]
+    )
+
+
+def __get_date_from_filenames(blb_df, src_column: str, dest_column: str):
+    return blb_df.lazy().with_columns(
+        [(pl.col(src_column).apply(lambda x: parse(x.name))).alias(dest_column)]
+    )
+
+
+# TODO: @todo Remove except_values parameter
 def get_missed_standardized_files(  # pylint:disable=too-many-arguments
     bucket_name: str,
     bucket_path: Optional[str] = None,
     start_date: Optional[DateTime] = None,
     range_hours: int = 24,
     date_format: str = PROCESSING_DATE_FORMAT,
-    except_values: Optional[Tuple[DateTime]] = None,
+    except_values: Optional[Tuple[DateTime]] = None,  # pylint:disable=unused-argument
+    date_range: Optional[GapDatePeriod] = None,
     client: Optional[Client] = None,
 ) -> List[DateTime]:
     """Check bucket contents for missing files representing polling responses."""
@@ -143,39 +175,40 @@ def get_missed_standardized_files(  # pylint:disable=too-many-arguments
     bucket = storage_client.bucket(bucket_name)
     bucket_path = Path("/" if not bucket_path else bucket_path.rstrip("/").lstrip("/"))
 
-    start_date = start_date or parse()
-
-    date_range = sorted(
-        map(
-            lambda x: format_date(x, date_format),
-            date_range_in_past(
-                start_date=truncate(start_date, level="hour"),
-                hours=range_hours - 1,
-                trunc_level="hour",
-                except_values=except_values,
-            ),
-        )
-    )
+    if date_range is None:
+        start_date = start_date or parse()
+        date_range = GapDatePeriod(start_date, range_hours - 1)
 
     fls = list_blobs_with_prefix(
+        client=storage_client,
         bucket_name=bucket,
-        start_offset=str(bucket_path.joinpath(date_range[0])),
-        end_offset=str(bucket_path.joinpath(date_range[-1])),
+        start_offset=str(
+            bucket_path.joinpath(format_date(date_range.start_date, date_format))
+        ),
+        end_offset=str(
+            bucket_path.joinpath(format_date(date_range.end_date, date_format))
+        ),
     )
 
-    fnd_fls = set()
+    if not fls:
+        return date_range.range.collect()["dates"].to_list()
 
-    for fl_blob in fls:
-        flp = Path(fl_blob.name)
-        if flp.parent == bucket_path:
-            fnd_fls.add(flp.name)
-
-    return list(
-        map(
-            lambda x: parse(x, PROCESSING_DATE_FORMAT),
-            set(date_range).difference(fnd_fls),
-        )
+    blb_df = pl.DataFrame({"blobs": fls}).lazy()
+    blb_df = (
+        blb_df.pipe(__df_get_blob_path, "blobs", "file_path")
+        .pipe(__df_drop_nested, "file_path", bucket_path)
+        .pipe(__get_date_from_filenames, "file_path", "dates")
+        .pipe(__df_meter_hours_str, "file_path", "hours")
+        .drop(["blobs", "file_path"])
     )
+
+    gaps = (
+        date_range.range.select(["dates", "hours"])
+        .join(blb_df, on="hours", how="inner")
+        .unique(subset=["hours"])
+    )
+
+    return gaps.collect()["dates"].to_list()
 
 
 def list_blobs_with_prefix(
