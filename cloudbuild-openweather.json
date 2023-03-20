@@ -23,7 +23,7 @@
                 "--no-allow-unauthenticated",
                 "--set-env-vars PROJECT={_ENV}-epbp",
                 "--ingress-settings=${_INGRESS}",
-                "--project {_ENV}-epbp",
+                "--project ${_ENV}-epbp",
                 "--entry-point start_${_FUNCTION_NAME}_connector"
             ]
         }
