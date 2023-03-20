@@ -1,12 +1,11 @@
 {
-    "steps":[
+    "steps": [
         {
-            "name":"gcr.io/google.com/cloudsdktool/cloud-sdk",
-            "waitFor": 
-                [
-                    "-"
-                ],
-            "args":[
+            "name": "gcr.io/google.com/cloudsdktool/cloud-sdk",
+            "waitFor": [
+                "-"
+            ],
+            "args": [
                 "gcloud",
                 "functions",
                 "deploy",
@@ -28,12 +27,12 @@
             ]
         }
     ],
-    "substitutions":{
-        "_FUNCTION_NAME":"openweather",
-        "_SERVICE_USER":"openweather",
-        "_ENV":"production",
-        "_MEMORY":"4096MB",
-        "_REGION":"us-east4",
-        "_INGRESS":"internal-and-gclb"
+    "substitutions": {
+        "_FUNCTION_NAME": "openweather",
+        "_SERVICE_USER": "openweather",
+        "_ENV": "production",
+        "_MEMORY": "4096MB",
+        "_REGION": "us-east4",
+        "_INGRESS": "internal-and-gclb"
     }
 }
