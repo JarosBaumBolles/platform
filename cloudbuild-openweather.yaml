@@ -8,7 +8,7 @@ steps:
       - '--service-account cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
       - '--source=.'
       - '--trigger-topic connector_${_FUNCTION_NAME}'
-      - '--runtime python39'
+      - '--runtime "python39"'
       - '--memory ${_MEMORY}'
       - '--timeout ${_TIMEOUT}'
       - '--region ${_REGION}'
