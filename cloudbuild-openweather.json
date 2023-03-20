@@ -9,9 +9,7 @@
                 "gcloud",
                 "functions",
                 "deploy",
-                [
-                    "connector_${_FUNCTION_NAME}"
-                ],
+                "connector_${_FUNCTION_NAME}",
                 "--service-account cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com",
                 "--source=.",
                 "--trigger-topic connector_${_FUNCTION_NAME}",
