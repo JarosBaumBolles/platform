@@ -29,20 +29,20 @@ steps:
     waitFor:
       - 'delete-topic'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
-    id: 'create-service-account'
-    allowFailure: true
-    allowExitCodes: [1]    
-    args:
-      - 'gcloud'
-      - 'iam'
-      - 'service-accounts'
-      - 'create' 
-      - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
-      - '--display-name="Integration dispatcher service user"'
-      - '--project=${_ENV}-epbp'
-    waitFor:
-    - 'create-topic'
+  # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+  #   id: 'create-service-account'
+  #   allowFailure: true
+  #   allowExitCodes: [1]    
+  #   args:
+  #     - 'gcloud'
+  #     - 'iam'
+  #     - 'service-accounts'
+  #     - 'create' 
+  #     - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+  #     - '--display-name="Integration dispatcher service user"'
+  #     - '--project=${_ENV}-epbp'
+  #   waitFor:
+  #   - 'create-topic'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
     id: 'deploy-function'
@@ -65,4 +65,4 @@ steps:
       - '--set-env-vars=PROJECT=${_ENV}-epbp'
       - '--set-env-vars=TEST=${_TEST}'
     waitFor:
-    - 'create-service-account'
+    - 'create-topic'
