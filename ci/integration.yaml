@@ -9,7 +9,7 @@ steps:
       - 'topics'
       - 'delete' 
       - 'connector_${_FUNCTION_NAME}'
-      - '--project=${_ENV}-epbp'
+      - '--project=${_PROJECT_ID}-epbp'
     waitFor:
       - '-'
 
@@ -25,7 +25,7 @@ steps:
       - 'connector_${_FUNCTION_NAME}' 
       - '--message-retention-duration=1h'
       - '--message-storage-policy-allowed-regions=${_REGION}'
-      - '--project=${_ENV}-epbp'
+      - '--project=${_PROJECT_ID}-epbp'
     waitFor:
       - 'delete-topic'
 
@@ -38,9 +38,9 @@ steps:
   #     - 'iam'
   #     - 'service-accounts'
   #     - 'create' 
-  #     - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+  #     - 'cloud-functions-${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
   #     - '--display-name="Integration dispatcher service user"'
-  #     - '--project=${_ENV}-epbp'
+  #     - '--project=${_PROJECT_ID}-epbp'
   #   waitFor:
   #   - 'create-topic'
 
@@ -51,7 +51,7 @@ steps:
       - 'functions'
       - 'deploy'
       - 'connector_${_FUNCTION_NAME}'
-      - '--service-account=cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+      - '--service-account=cloud-functions-${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
       - '--source=.'
       - '--trigger-topic=connector_${_FUNCTION_NAME}'
       - '--runtime=python39'
@@ -60,9 +60,8 @@ steps:
       - '--region=${_REGION}'
       - '--no-allow-unauthenticated'
       - '--ingress-settings=${_INGRESS}'
-      - '--project=${_ENV}-epbp'
+      - '--project=${_PROJECT_ID}-epbp'
       - '--entry-point=start_${_FUNCTION_NAME}_connector'
-      - '--set-env-vars=PROJECT=${_ENV}-epbp'
-      - '--set-env-vars=TEST=${_TEST}'
+      - '--set-env-vars=PROJECT=${_PROJECT_ID}-epbp'
     waitFor:
     - 'create-topic'
