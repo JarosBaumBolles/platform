@@ -1,28 +1,59 @@
 steps:
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:420.0.0'
-    entrypoint: 'gcloud'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+    id: 'delete-topic'
+    allowExitCodes: [1]
     args:
-      - 'functions'
-      - 'deploy'
-      - 'connector_${_FUNCTION_NAME} '
-      - '--service-account cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com '
-      - '--source=. '
-      - '--trigger-topic connector_${_FUNCTION_NAME} '
-      - '--runtime "python39" '
-      - '--memory ${_MEMORY} '
-      - '--timeout ${_TIMEOUT} '
-      - '--region ${_REGION} '
-      - '--no-allow-unauthenticated '
-      - '--set-env-vars PROJECT=${_ENV}-epbp '
-      - '--ingress-settings=${_INGRESS} '
-      - '--project ${_ENV}-epbp '
-      - '--entry-point start_${_FUNCTION_NAME}_connecto r'
+      - 'gcloud'
+      - 'pubsub'
+      - 'topics'
+      - 'delete' 
+      - 'connector_${_FUNCTION_NAME}'
+      - '--project=${_ENV}-epbp'
     waitFor:
-    - '-'
+      - '-'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+    id: 'create-topic'
+    args:
+      - 'gcloud' 
+      - 'pubsub'
+      - 'topics' 
+      - 'create' 
+      - 'connector_${_FUNCTION_NAME}' 
+      - '--message-retention-duration=1h'
+      - '--message-storage-policy-allowed-regions=${_REGION}'
+      - '--project=${_ENV}-epbp'
+    waitFor:
+      - 'delete-topic'
+
+  # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+  #   id: 'deploy-function'
+  #   args:
+  #     - 'gcloud'
+  #     - 'functions'
+  #     - 'deploy'
+  #     - 'connector_${_FUNCTION_NAME}'
+  #     - '--service-account=cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+  #     - '--source=.'
+  #     - '--trigger-topic=connector_${_FUNCTION_NAME}'
+  #     - '--runtime=python39'
+  #     - '--memory=${_MEMORY}'
+  #     - '--timeout=${_TIMEOUT}'
+  #     - '--region=${_REGION}'
+  #     - '--no-allow-unauthenticated'
+  #     - '--ingress-settings=${_INGRESS}'
+  #     - '--project=${_ENV}-epbp'
+  #     - '--entry-point=start_${_FUNCTION_NAME}_connector'
+  #     - '--set-env-vars=PROJECT=${_ENV}-epbp'
+  #     - '--set-env-vars=TEST=${_TEST}'
+  #   waitFor:
+  #   - 'create-topic'
 substitutions:
   _ENV: production
   _FUNCTION_NAME: openweather
-  _INGRESS: internal-and-gclb
-  _MEMORY: 4096MB
+  # _INGRESS: internal-and-gclb
+  # _MEMORY: 4096MB
   _REGION: us-east4
-  _SERVICE_USER: openweather
+  # _SERVICE_USER: openweather
+  # _TIMEOUT: "540"
+  # _TEST: "TEST"

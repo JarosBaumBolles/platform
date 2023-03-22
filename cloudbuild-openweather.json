@@ -2,6 +2,7 @@
     "steps": [
         {
             "name": "gcr.io/google.com/cloudsdktool/cloud-sdk",
+            "allowexitcodes": [1],
             "waitFor": [
                 "-"
             ],
@@ -10,18 +11,18 @@
                 "functions",
                 "deploy",
                 "connector_${_FUNCTION_NAME}",
-                "--service-account cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com",
+                "--service-account=cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com",
                 "--source=.",
-                "--trigger-topic connector_${_FUNCTION_NAME}",
-                "--runtime python39",
-                "--memory '${_MEMORY}'",
-                "--timeout '${_TIMEOUT}'",
-                "--region '${_REGION}'",
+                "--trigger-topic=connector_${_FUNCTION_NAME}",
+                "--runtime=python39",
+                "--memory=${_MEMORY}",
+                "--timeout=${_TIMEOUT}",
+                "--region=${_REGION}",
                 "--no-allow-unauthenticated",
-                "--set-env-vars PROJECT=${_ENV}-epbp",
+                "--set-env-vars=PROJECT=${_ENV}-epbp",
                 "--ingress-settings=${_INGRESS}",
-                "--project ${_ENV}-epbp",
-                "--entry-point start_${_FUNCTION_NAME}_connector"
+                "--project=${_ENV}-epbp",
+                "--entry-point=start_${_FUNCTION_NAME}_connector"
             ]
         }
     ],
@@ -31,6 +32,7 @@
         "_ENV": "production",
         "_MEMORY": "4096MB",
         "_REGION": "us-east4",
-        "_INGRESS": "internal-and-gclb"
+        "_INGRESS": "internal-and-gclb",
+        "_TIMEOUT": "540" 
     }
 }
