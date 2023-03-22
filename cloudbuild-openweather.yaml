@@ -1,6 +1,7 @@
 steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
     id: 'delete-topic'
+    allowFailure: true
     allowExitCodes: [1]
     args:
       - 'gcloud'
