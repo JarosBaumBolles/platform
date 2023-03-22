@@ -15,6 +15,8 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
     id: 'create-topic'
+    allowFailure: true
+    allowExitCodes: [1]    
     args:
       - 'gcloud' 
       - 'pubsub'
@@ -27,34 +29,49 @@ steps:
     waitFor:
       - 'delete-topic'
 
-  # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
-  #   id: 'deploy-function'
-  #   args:
-  #     - 'gcloud'
-  #     - 'functions'
-  #     - 'deploy'
-  #     - 'connector_${_FUNCTION_NAME}'
-  #     - '--service-account=cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
-  #     - '--source=.'
-  #     - '--trigger-topic=connector_${_FUNCTION_NAME}'
-  #     - '--runtime=python39'
-  #     - '--memory=${_MEMORY}'
-  #     - '--timeout=${_TIMEOUT}'
-  #     - '--region=${_REGION}'
-  #     - '--no-allow-unauthenticated'
-  #     - '--ingress-settings=${_INGRESS}'
-  #     - '--project=${_ENV}-epbp'
-  #     - '--entry-point=start_${_FUNCTION_NAME}_connector'
-  #     - '--set-env-vars=PROJECT=${_ENV}-epbp'
-  #     - '--set-env-vars=TEST=${_TEST}'
-  #   waitFor:
-  #   - 'create-topic'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+    id: 'create-service-account'
+    allowFailure: true
+    allowExitCodes: [1]    
+    args:
+      - 'gcloud' 
+      - 'iam'
+      - 'service-accounts'
+      - 'create' 
+      - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com' 
+      - '--display-name="Integration dispatcher service user"' 
+      - '--project=${_ENV}-epbp' 
+    waitFor:
+    - 'create-topic'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+    id: 'deploy-function'
+    args:
+      - 'gcloud'
+      - 'functions'
+      - 'deploy'
+      - 'connector_${_FUNCTION_NAME}'
+      - '--service-account=cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+      - '--source=.'
+      - '--trigger-topic=connector_${_FUNCTION_NAME}'
+      - '--runtime=python39'
+      - '--memory=${_MEMORY}'
+      - '--timeout=${_TIMEOUT}'
+      - '--region=${_REGION}'
+      - '--no-allow-unauthenticated'
+      - '--ingress-settings=${_INGRESS}'
+      - '--project=${_ENV}-epbp'
+      - '--entry-point=start_${_FUNCTION_NAME}_connector'
+      - '--set-env-vars=PROJECT=${_ENV}-epbp'
+      - '--set-env-vars=TEST=${_TEST}'
+    waitFor:
+    - 'create-service-account'
 substitutions:
   _ENV: production
   _FUNCTION_NAME: openweather
-  # _INGRESS: internal-and-gclb
-  # _MEMORY: 4096MB
+  _INGRESS: internal-and-gclb
+  _MEMORY: 4096MB
   _REGION: us-east4
-  # _SERVICE_USER: openweather
-  # _TIMEOUT: "540"
-  # _TEST: "TEST"
+  _SERVICE_USER: openweather
+  _TIMEOUT: "540"
+  _TEST: "TEST"
