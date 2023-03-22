@@ -92,7 +92,7 @@ class GapsDetectionWorker(BaseFetchWorker):
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
-                date_range=self._expected_hours,
+                date_range=self._expected_hours
             )
             if mtr_msd_poll_hrs:
                 for mt_hr in mtr_msd_poll_hrs:
