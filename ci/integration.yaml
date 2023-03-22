@@ -16,7 +16,7 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
     id: 'create-topic'
     allowFailure: true
-    allowExitCodes: [1]    
+    allowExitCodes: [1]
     args:
       - 'gcloud' 
       - 'pubsub'
@@ -34,13 +34,13 @@ steps:
     allowFailure: true
     allowExitCodes: [1]    
     args:
-      - 'gcloud' 
+      - 'gcloud'
       - 'iam'
       - 'service-accounts'
       - 'create' 
-      - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com' 
-      - '--display-name="Integration dispatcher service user"' 
-      - '--project=${_ENV}-epbp' 
+      - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com'
+      - '--display-name="Integration dispatcher service user"'
+      - '--project=${_ENV}-epbp'
     waitFor:
     - 'create-topic'
 
@@ -66,12 +66,3 @@ steps:
       - '--set-env-vars=TEST=${_TEST}'
     waitFor:
     - 'create-service-account'
-substitutions:
-  _ENV: production
-  _FUNCTION_NAME: openweather
-  _INGRESS: internal-and-gclb
-  _MEMORY: 4096MB
-  _REGION: us-east4
-  _SERVICE_USER: openweather
-  _TIMEOUT: "540"
-  _TEST: "TEST"
