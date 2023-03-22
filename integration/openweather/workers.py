@@ -24,7 +24,7 @@ from common.bucket_helpers import (
     require_client,
 )
 from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
+from common.date_utils import GapDatePeriod, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.openweather.data_structures import DataFile, StandardizedFile
@@ -42,7 +42,7 @@ class GapsDetectionWorker(BaseFetchWorker):
     __name__ = "OpenWeather Missed Hours Worker"
     __max_idle_run_count__ = 5
 
-    def __init__(   # pylint:disable=super-init-not-called
+    def __init__(  # pylint:disable=super-init-not-called
         self,
         missed_hours_cache: ExpiringDict,
         config: Any,
@@ -56,11 +56,15 @@ class GapsDetectionWorker(BaseFetchWorker):
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[GapDatePeriod] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -88,6 +92,7 @@ class GapsDetectionWorker(BaseFetchWorker):
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
+                date_range=self._expected_hours,
             )
             if mtr_msd_poll_hrs:
                 for mtr_hr in mtr_msd_poll_hrs:
