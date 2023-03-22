@@ -37,7 +37,8 @@ steps:
       - 'gcloud' 
       - 'iam'
       - 'service-accounts'
-      - 'create cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com' 
+      - 'create' 
+      - 'cloud-functions-${_SERVICE_USER}@${_ENV}-epbp.iam.gserviceaccount.com' 
       - '--display-name="Integration dispatcher service user"' 
       - '--project=${_ENV}-epbp' 
     waitFor:
