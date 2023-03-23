@@ -20,11 +20,15 @@ from pendulum import DateTime
 import common.settings as CFG
 from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
+from common.date_utils import GapDatePeriod, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import BaseFetchWorker, BaseStandardizeWorker
 from integration.braxos.data_structures import DataFile, StandardizedFile
 from integration.braxos.exception import EmptyDataInterruption, LoadFromConnectorAPI
+
+RUN_GAPS_PARALLEL = False
+RUN_FETCH_PARALLEL = False
+RUN_STANDARDIZE_PARALLEL = False
 
 
 class GapsDetectionWorker(BaseFetchWorker):
@@ -49,11 +53,15 @@ class GapsDetectionWorker(BaseFetchWorker):
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[GapDatePeriod] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -81,6 +89,7 @@ class GapsDetectionWorker(BaseFetchWorker):
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
+                date_range=self._expected_hours,
             )
             if mtr_msd_poll_hrs:
                 # missed_hours.put((mtr_cfg, mtr_msd_poll_hrs))
@@ -104,7 +113,10 @@ class GapsDetectionWorker(BaseFetchWorker):
     def run(self, run_time: DateTime) -> None:
         """Run loop entrypoint"""
         self.configure(run_time)
-        self._run_consumers((self.missed_hours_consumer, [require_client()]))
+        self._run_consumers(
+            (self.missed_hours_consumer, [require_client()]),
+            run_parallel=RUN_GAPS_PARALLEL,
+        )
 
     # TODO: should be removed
     @abstractmethod
@@ -238,7 +250,7 @@ class FetchWorker(BaseFetchWorker):
                                 f"Canot load the local file due to the reason '{err}'"
                                 " Loading from the WatTime API"
                             )
-                            filepath = Path(temp_dir.name).joinpath(provider_filename)
+                            filepath = Path(temp_dir).joinpath(provider_filename)
                             try:
                                 sftp.get(provider_filename, str(filepath))
                             except (FileNotFoundError, SSHException) as ft_err:
@@ -267,7 +279,6 @@ class FetchWorker(BaseFetchWorker):
                             self._add_to_update(
                                 file_info, self._fetch_update_file_buffer
                             )
-                temp_dir.cleanup()
 
     def run(self, run_time: DateTime) -> None:
         """Run loop entrypoint"""
@@ -276,13 +287,15 @@ class FetchWorker(BaseFetchWorker):
             [
                 (self.fetch_consumer, [require_client()]),
                 (self.save_fetched_files_worker, []),
-            ]
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self.finalize_fetch_update_status()
         self._run_consumers(
             [
                 (self.save_fetch_status_worker, []),
-            ]
+            ],
+            run_parallel=RUN_FETCH_PARALLEL,
         )
         self._logger.info("Fetching has been done.")
 
@@ -338,18 +351,13 @@ class StandardizeWorker(BaseStandardizeWorker):
     def _get_data_df(self, data: str) -> DataFrame:
         raw_df = read_csv(StringIO(data))
         raw_df = raw_df.drop_duplicates()
-        # raw_df = DataFrame.from_dict(data.get("data", []))
-        # raw_df.rename(columns={"timestamp": "date"}, inplace=True)
         raw_df["ActivityID"] = raw_df["ActivityID"].astype(float)
         raw_df[["hour", "timestamp"]] = list(map(self.date_repr, raw_df.NDT))
         raw_df.sort_values(by=["timestamp"], inplace=True, ascending=False)
         raw_df["events"] = list(
             map(lambda x: x.split("-")[-1].strip().lower(), raw_df.EventName)
         )
-        # res = raw_df.groupby("hour")["value"].agg(["min", "max"])
-        # raw_df = raw_df.merge(res, how="left", on='hour')
         raw_df = raw_df.reset_index()
-        # raw_df["consumption"] = raw_df["max"] - raw_df["min"]
         return raw_df
 
     def _standardize(self, raw_file_obj: DataFile) -> List[DataFile]:
@@ -410,7 +418,11 @@ class StandardizeWorker(BaseStandardizeWorker):
             [
                 (self.run_standardize_worker, []),
                 (self.save_standardized_files_worker, []),
-            ]
+            ],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
         )
         self.finalize_standardize_update_status()
-        self._run_consumers([(self.save_standardize_status_worker, [])])
+        self._run_consumers(
+            [(self.save_standardize_status_worker, [])],
+            run_parallel=RUN_STANDARDIZE_PARALLEL,
+        )
