@@ -19,7 +19,7 @@ from requests.auth import HTTPBasicAuth
 from common import settings as CFG
 from common.bucket_helpers import get_missed_standardized_files, require_client
 from common.data_representation.standardized.meter import Meter
-from common.date_utils import format_date, parse, truncate
+from common.date_utils import GapDatePeriod, format_date, parse, truncate
 from common.logging import Logger, ThreadPoolExecutorLogger
 from integration.base_integration import (
     BaseFetchWorker,
@@ -59,11 +59,15 @@ class MarginalEmGapsDetectionWorker(BaseFetchWorker):
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[GapDatePeriod] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -91,6 +95,7 @@ class MarginalEmGapsDetectionWorker(BaseFetchWorker):
                 bucket_path=mtr_cfg.standardized.path,
                 range_hours=self._config.gap_regeneration_window,
                 client=storage_client,
+                date_range=self._expected_hours,
             )
             if mtr_msd_poll_hrs:
                 # missed_hours.put((mtr_cfg, mtr_msd_poll_hrs))
@@ -188,12 +193,6 @@ class WatTimeBaseFetchWorker(BaseFetchWorker):
                     params={},
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=self.__request_timeout__,
-                )
-                self._th_logger.debug(
-                    "Recieved response with empty data. "
-                    f"Response status code is {result.status_code}. "
-                    f"Response message is {result.text}. Response parameters: - "
-                    f"{params}; "
                 )
                 if result.status_code == HTTPStatus.OK.value:
                     data = result.json()
@@ -501,11 +500,15 @@ class AverageEmGapsDetectionWorker(BaseFetchWorker):
         self._th_logger = ThreadPoolExecutorLogger(
             description=self.__description__, trace_id=self._trace_id
         )
+        self._expected_hours: Optional[GapDatePeriod] = None
 
     def configure(self, run_time: DateTime) -> None:
         self._run_time = run_time
         self._clear_queue(self._meters_queue)
         self._missed_hours_cache.clear()
+        self._expected_hours = GapDatePeriod(
+            self._run_time, self._config.gap_regeneration_window - 1
+        )
         for mtr_cfg in self._config.meters:
             self._meters_queue.put(mtr_cfg)
 
@@ -534,6 +537,7 @@ class AverageEmGapsDetectionWorker(BaseFetchWorker):
                     bucket_path=mtr_cfg.standardized.path,
                     range_hours=self._config.gap_regeneration_window,
                     client=storage_client,
+                    date_range=self._expected_hours,
                 )
             )
             if not mtr_msd_poll_hrs:
