@@ -6,7 +6,7 @@ steps:
       - 'functions'
       - 'deploy'
       - '${_FUNCTION_NAME}'
-      - '--service-account=${_SERVICE_USER}@${_PROJECT_ID}-epbp@appspot.gserviceaccount.com'
+      - '--service-account=${_PROJECT_ID}-epbp@appspot.gserviceaccount.com'
       - '--source=.'
       - '--trigger-http'
       - '--runtime=python39'
