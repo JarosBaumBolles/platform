@@ -1,0 +1,24 @@
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:423.0.0'
+    id: 'deploy-function'
+    args:
+      - 'gcloud'
+      - 'functions'
+      - 'deploy'
+      - '${_FUNCTION_NAME}'
+      - '--service-account=${_SERVICE_USER}@${_PROJECT_ID}-epbp@appspot.gserviceaccount.com'
+      - '--source=.'
+      - '--trigger-http'
+      - '--runtime=python39'
+      - '--memory=${_MEMORY}'
+      - '--timeout=${_TIMEOUT}'
+      - '--region=${_REGION}'
+      - '--allow-unauthenticated'
+      - '--ingress-settings=${_INGRESS}'
+      - '--project=${_PROJECT_ID}-epbp'
+      - '--entry-point=${_ENTRYPOINT}'
+      - '--set-env-vars=PROJECT=${_PROJECT_ID}-epbp'
+      - '--set-env-vars=PROJECT=${_CONED_SUBSCRIPTION_KEY}'
+    waitFor:
+      - '-'
+   
