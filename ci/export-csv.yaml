@@ -64,5 +64,5 @@ steps:
       - '--entry-point=${_ENTRYPOINT}'
       - '--set-env-vars=PROJECT=${_PROJECT_ID}-epbp'
     waitFor:
-    - 'create-topic'
+      - 'create-topic'
    
