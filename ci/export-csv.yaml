@@ -42,15 +42,15 @@ steps:
   #     - '--display-name="Integration dispatcher service user"'
   #     - '--project=${_PROJECT_ID}-epbp'
   #   waitFor:
-  #   - 'create-topic'
+  #     - 'create-topic'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:423.0.0'
     id: 'deploy-function'
     args:
       - 'gcloud'
       - 'functions'
       - 'deploy'
-      - 'connector_${_FUNCTION_NAME}'
+      - '${_FUNCTION_NAME}'
       - '--service-account=${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
       - '--source=.'
       - '--trigger-topic=${_TOPIC}'
@@ -61,7 +61,8 @@ steps:
       - '--no-allow-unauthenticated'
       - '--ingress-settings=${_INGRESS}'
       - '--project=${_PROJECT_ID}-epbp'
-      - '--entry-point=${_ENTRYPOINT}r'
+      - '--entry-point=${_ENTRYPOINT}'
       - '--set-env-vars=PROJECT=${_PROJECT_ID}-epbp'
     waitFor:
-    - 'create-topic'
+      - 'create-topic'
+   
