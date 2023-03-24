@@ -42,7 +42,7 @@ steps:
   #     - '--display-name="Integration dispatcher service user"'
   #     - '--project=${_PROJECT_ID}-epbp'
   #   waitFor:
-    - 'create-topic'
+  #     - 'create-topic'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:423.0.0'
     id: 'deploy-function'
