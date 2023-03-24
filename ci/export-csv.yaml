@@ -29,28 +29,28 @@ steps:
     waitFor:
       - 'delete-topic'
 
-  # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
-  #   id: 'create-service-account'
-  #   allowFailure: true
-  #   allowExitCodes: [1]    
-  #   args:
-  #     - 'gcloud'
-  #     - 'iam'
-  #     - 'service-accounts'
-  #     - 'create' 
-  #     - 'cloud-functions-${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
-  #     - '--display-name="Integration dispatcher service user"'
-  #     - '--project=${_PROJECT_ID}-epbp'
-  #   waitFor:
-  #   - 'create-topic'
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:422.0.0'
+    id: 'create-service-account'
+    allowFailure: true
+    allowExitCodes: [1]    
+    args:
+      - 'gcloud'
+      - 'iam'
+      - 'service-accounts'
+      - 'create' 
+      - 'cloud-functions-${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
+      - '--display-name="Integration dispatcher service user"'
+      - '--project=${_PROJECT_ID}-epbp'
+    waitFor:
+    - 'create-topic'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:423.0.0'
     id: 'deploy-function'
     args:
       - 'gcloud'
       - 'functions'
       - 'deploy'
-      - 'connector_${_FUNCTION_NAME}'
+      - '${_FUNCTION_NAME}'
       - '--service-account=${_SERVICE_USER}@${_PROJECT_ID}-epbp.iam.gserviceaccount.com'
       - '--source=.'
       - '--trigger-topic=${_TOPIC}'
@@ -61,7 +61,8 @@ steps:
       - '--no-allow-unauthenticated'
       - '--ingress-settings=${_INGRESS}'
       - '--project=${_PROJECT_ID}-epbp'
-      - '--entry-point=${_ENTRYPOINT}r'
+      - '--entry-point=${_ENTRYPOINT}'
       - '--set-env-vars=PROJECT=${_PROJECT_ID}-epbp'
     waitFor:
     - 'create-topic'
+   
