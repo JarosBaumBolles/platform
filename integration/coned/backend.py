@@ -276,6 +276,8 @@ def main(request):
             }
             headers["Authorization"] = f'Bearer {api_response["access_token"]}'
 
+            logger.warning(f"SUBSCRIPTION_KEY={SUBSCRIPTION_KEY}")
+
             usage_points_response = http_request(
                 (
                     "https://api.coned.com/gbc/v1/resource/Subscription"
