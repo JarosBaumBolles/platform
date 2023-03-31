@@ -204,7 +204,7 @@ def get_missed_standardized_files(  # pylint:disable=too-many-arguments
 
     gaps = (
         date_range.range.select(["dates", "hours"])
-        .join(blb_df, on="hours", how="inner")
+        .join(blb_df, on="hours", how="anti")
         .unique(subset=["hours"])
     )
 
