@@ -1,15 +1,16 @@
 """ ConEd integration module"""
 
 import base64
-import datetime
 import math
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from abc import abstractmethod
 from dataclasses import asdict
-from json import JSONDecodeError, loads, load, dumps
+from json import JSONDecodeError, dumps, load, loads
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
+from urllib.error import HTTPError, URLError
 
 from dataclass_factory import Factory
 
@@ -26,6 +27,7 @@ from common.request_helpers import (
 )
 from integration.base_integration import BasePullConnector, MalformedConfig
 from integration.coned.config import ConedCfg
+from integration.coned.exception import UnxpectedBehavior
 
 
 class ConEdConnector(BasePullConnector):
@@ -33,6 +35,14 @@ class ConEdConnector(BasePullConnector):
 
     __created_by__ = "ConEd Connector"
     __description__ = "ConEd Integration"
+    __hours_delay__ = 12
+
+    __max_retry_count__ = 3
+    __retry_delay__ = 0.5
+
+    __api_date_time__ = "YYYY-MM-DD"
+    __min_hours_delta__ = 24
+    __previous_hour_delta__ = 1
 
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
@@ -50,9 +60,11 @@ class ConEdConnector(BasePullConnector):
         self._logger.info("Matching missed hour.")
         with elapsed_timer() as elapsed:
             for mtr_cfg in self._config.meters:
+                start_date = truncate(
+                    self._run_time.subtract(hours=self.__hours_delay__), level="hour"
+                )
                 mtr_msd_poll_hrs = get_missed_standardized_files(
-                    start_date=datetime.datetime.utcnow()
-                    - datetime.timedelta(hours=12),
+                    start_date=start_date,
                     bucket_name=mtr_cfg.standardized.bucket,
                     bucket_path=mtr_cfg.standardized.path,
                     range_hours=self._config.gap_regeneration_window,
@@ -88,6 +100,66 @@ class ConEdConnector(BasePullConnector):
                 },
             )
 
+    def _retry_request(
+        self,
+        url: str,
+        payload: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+        parameters: Optional[Dict] = None,
+        method: HTTPRequestMethod = HTTPRequestMethod.GET,
+        request_payload_type: PayloadType = PayloadType.JSON,
+        response_payload_type: PayloadType = PayloadType.JSON,
+    ) -> Any:
+        payload = payload or {}
+        parameters = parameters or {}
+        headers = headers or {}
+        result, retry_count, delay = None, 0, 0.5
+        while retry_count < self.__max_retry_count__:
+            try:
+                result = http_request(
+                    url,
+                    payload=payload,
+                    parameters=parameters,
+                    headers=headers,
+                    method=method,
+                    request_payload_type=request_payload_type,
+                    response_payload_type=response_payload_type,
+                )
+                return result
+            except HTTPError as http_err:
+                retry_count += 1
+                delay *= retry_count
+                time.sleep(delay)
+                self._logger.warning(
+                    f"HTTPError. Cannot retrieve data for the `{url}` due "
+                    f"to the reason `{http_err}`.\n"
+                    f"Try once more in a {delay} seconds.\n"
+                    f"The participant id - {self._config.extra.participant_id}.\n"
+                    f"The URL - `{url}`.\n"
+                    f"The parameters - `{parameters}`.\n"
+                    f"The payload - `{payload}`.\n"
+                    f"The headers - `{headers}`.\n"
+                    f"The request_payload_type - `{request_payload_type}`\n"
+                    f"The response_payload_type - `{response_payload_type}`.\n"
+                )
+            except URLError as err:
+                retry_count += 1
+                delay *= retry_count
+                time.sleep(delay)
+                self._logger.error(
+                    f"URLError. Cannot retrieve data for the `{url}` "
+                    f"due to the reason `{err}`.\n"
+                    f"Try once more in a {delay} seconds.\n"
+                    f"The participant id - {self._config.extra.participant_id}.\n"
+                    f"The URL - `{url}`.\n"
+                    f"The parameters - `{parameters}`.\n"
+                    f"The payload - `{payload}`.\n"
+                    f"The headers - `{headers}`.\n"
+                    f"The request_payload_type - `{request_payload_type}`\n"
+                    f"The response_payload_type - `{response_payload_type}`.\n"
+                )
+        raise UnxpectedBehavior("Unxpected behavior")
+
     def fetch_and_standardize(self) -> None:
         """Fetch and standardize"""
         with elapsed_timer() as elapsed:
@@ -105,20 +177,18 @@ class ConEdConnector(BasePullConnector):
                 "Content-Type": "application/json",
             }
 
-            self._logger.warning("Refreshing token")
+            self._logger.debug("Refreshing token")
             self._logger.debug(f"Payload - {payload}")
             self._logger.debug(f"Headers - {headers}")
 
-            response = http_request(
-                "https://api.coned.com/gbc/v1/oauth/v1/Token",
+            response = self._retry_request(
+                url="https://api.coned.com/gbc/v1/oauth/v1/Token",
                 payload=payload,
                 headers=headers,
                 method=HTTPRequestMethod.POST,
-                request_payload_type=PayloadType.JSON,
-                response_payload_type=PayloadType.JSON,
             )
 
-            self._logger.warning(f"Refreshed token - {response}")
+            self._logger.debug(f"Refreshed token - {response}")
 
             headers = {
                 "ocp-apim-subscription-key": self._config.subscription_key,
@@ -147,34 +217,41 @@ class ConEdConnector(BasePullConnector):
 
                     value = 0
 
-                    current_requested_time = current_time
-                    published_max = current_requested_time.strftime("%Y-%m-%d")
-                    published_min = (
-                        current_requested_time - datetime.timedelta(hours=24)
-                    ).strftime("%Y-%m-%d")
+                    published_max = format_date(current_time, self.__api_date_time__)
 
-                    previous_requested_hour = (
-                        current_requested_time - datetime.timedelta(hours=1)
+                    published_min = format_date(
+                        current_time.subtract(hours=self.__min_hours_delta__),
+                        self.__api_date_time__,
+                    )
+
+                    previous_requested_hour = current_time.subtract(
+                        hours=self.__previous_hour_delta__
                     )
 
                     if published_min not in processed_days:
                         try:
                             processed_days.add(published_min)
-                            meter_response = http_request(
-                                (
-                                    "https://api.coned.com/gbc/v1/resource/Subscription/"
-                                    f"{self._config.subscription_id}/UsagePoint/"
-                                    f"{self._config.usage_point_id}/MeterReading/"
-                                    f"{self._config.meter_reading_id}/IntervalBlock/"
-                                    f"SP_{self._config.usage_point_id}_KWH%20"
-                                    f"{self._config.interval}%20Minute%20Interval%20"
-                                    "Read%20Interval"
-                                ),
-                                parameters={
-                                    "publishedMin": published_min,
-                                    "publishedMax": published_max,
-                                },
+                            url = (
+                                "https://api.coned.com/gbc/v1/resource/Subscription/"
+                                f"{self._config.subscription_id}/UsagePoint/"
+                                f"{self._config.usage_point_id}/MeterReading/"
+                                f"{self._config.meter_reading_id}/IntervalBlock/"
+                                f"SP_{self._config.usage_point_id}_KWH%20"
+                                f"{self._config.interval}%20Minute%20Interval%20"
+                                "Read%20Interval"
+                            )
+                            parameters = {
+                                "publishedMin": published_min,
+                                "publishedMax": published_max,
+                            }
+
+                            meter_response = self._retry_request(
+                                url=url,
+                                parameters=parameters,
                                 headers=headers,
+                                method=HTTPRequestMethod.GET,
+                                request_payload_type=PayloadType.JSON,
+                                response_payload_type=PayloadType.TEXT,
                             )
                         except JBBRequestHelperException:
                             self._logger.error(
@@ -185,9 +262,7 @@ class ConEdConnector(BasePullConnector):
 
                     required_intervals = [
                         math.floor(
-                            previous_requested_hour.replace(
-                                second=0, minute=0, microsecond=0
-                            ).timestamp()
+                            truncate(previous_requested_hour, level="hour").timestamp()
                         )
                     ]
                     interval = int(self._config.interval)
@@ -296,12 +371,15 @@ def main(event, context):  # pylint:disable=unused-argument
         trace_id=uuid.uuid4(),
     )
     with elapsed_timer() as ellapsed:
-        connector = ConEdConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
-        connector.configure(event)
-        connector.run()
-        main_logger.info(
-            f"INFO: CONED INTEGRATION: Completed. Ellapsed time is {ellapsed()}"
-        )
+        try:
+            connector = ConEdConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
+            connector.configure(event)
+            connector.run()
+            main_logger.info(
+                f"INFO: CONED INTEGRATION: Completed. Ellapsed time is {ellapsed()}"
+            )
+        except UnxpectedBehavior:
+            main_logger.error("Unxpectedly completed. See logs for more details")
 
 
 if __name__ == "__main__":
