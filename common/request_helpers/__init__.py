@@ -5,9 +5,9 @@ Decoding from JSON, XML, CSV is performed as part of querying logic as well.
 
 # Standard imports
 import logging
+import re
 import time
 import uuid
-import re
 from enum import Enum
 from functools import wraps
 from json import dumps, loads
@@ -74,14 +74,9 @@ def http_request(  # pylint:disable=too-many-arguments
     method=HTTPRequestMethod.GET,
     request_payload_type=PayloadType.JSON,
     response_payload_type=PayloadType.TEXT,
+    timeout: int = TIMEOUT,
 ):
     """Wrapper around standard urllib logic to help perform HTTP request related logic."""
-
-    # assert isinstance(url, str)
-    # assert isinstance(parameters, dict) or parameters is None
-    # assert isinstance(method, HTTPRequestMethod)
-    # assert isinstance(request_payload_type, PayloadType)
-    # assert isinstance(response_payload_type, PayloadType)
 
     if payload:
         if request_payload_type != PayloadType.JSON:
@@ -105,7 +100,7 @@ def http_request(  # pylint:disable=too-many-arguments
     url_request = Request(
         url=url, data=payload, method=method.name, headers=(headers or {})
     )
-    with urlopen(url_request, timeout=TIMEOUT) as response:  # nosec
+    with urlopen(url_request, timeout=timeout) as response:  # nosec
 
         if response.getcode() != 200:
             LOGGER.error("Downtime happened on the integration provider side")

@@ -44,6 +44,8 @@ class ConEdConnector(BasePullConnector):
     __min_hours_delta__ = 24
     __previous_hour_delta__ = 1
 
+    __request_timeout__ = 90
+
     def __init__(self, env_tz_info):
         super().__init__(env_tz_info=env_tz_info)
         self._factory = Factory()
@@ -109,10 +111,8 @@ class ConEdConnector(BasePullConnector):
         method: HTTPRequestMethod = HTTPRequestMethod.GET,
         request_payload_type: PayloadType = PayloadType.JSON,
         response_payload_type: PayloadType = PayloadType.JSON,
+        timeout: int = 30,
     ) -> Any:
-        payload = payload or {}
-        parameters = parameters or {}
-        headers = headers or {}
         result, retry_count, delay = None, 0, 0.5
         while retry_count < self.__max_retry_count__:
             try:
@@ -124,6 +124,7 @@ class ConEdConnector(BasePullConnector):
                     method=method,
                     request_payload_type=request_payload_type,
                     response_payload_type=response_payload_type,
+                    timeout=timeout,
                 )
                 return result
             except HTTPError as http_err:
@@ -181,12 +182,20 @@ class ConEdConnector(BasePullConnector):
             self._logger.debug(f"Payload - {payload}")
             self._logger.debug(f"Headers - {headers}")
 
-            response = self._retry_request(
-                url="https://api.coned.com/gbc/v1/oauth/v1/Token",
-                payload=payload,
-                headers=headers,
-                method=HTTPRequestMethod.POST,
-            )
+            try:
+                response = self._retry_request(
+                    url="https://api.coned.com/gbc/v1/oauth/v1/Token",
+                    payload=payload,
+                    headers=headers,
+                    method=HTTPRequestMethod.POST,
+                    timeout=self.__request_timeout__,
+                )
+            except UnxpectedBehavior:
+                self._logger.error(
+                    "Cannot retieve refresh token. See logs for the more information"
+                    "Exiting..."
+                )
+                return None
 
             self._logger.debug(f"Refreshed token - {response}")
 
@@ -252,11 +261,18 @@ class ConEdConnector(BasePullConnector):
                                 method=HTTPRequestMethod.GET,
                                 request_payload_type=PayloadType.JSON,
                                 response_payload_type=PayloadType.TEXT,
+                                timeout=self.__request_timeout__,
                             )
                         except JBBRequestHelperException:
                             self._logger.error(
                                 "No data from historical API for "
                                 f"{missed_hour}. Skipping..."
+                            )
+                            continue
+                        except UnxpectedBehavior:
+                            self._logger.error(
+                                "Cannot retieve meter data. See logs for the "
+                                "more information. Skipping..."
                             )
                             continue
 
@@ -346,6 +362,7 @@ class ConEdConnector(BasePullConnector):
                 "Completed fetching data.",
                 extra={"labels": {"elapset_time": elapsed()}},
             )
+        return None
 
     def run(self):
         super().run()
@@ -371,15 +388,12 @@ def main(event, context):  # pylint:disable=unused-argument
         trace_id=uuid.uuid4(),
     )
     with elapsed_timer() as ellapsed:
-        try:
-            connector = ConEdConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
-            connector.configure(event)
-            connector.run()
-            main_logger.info(
-                f"INFO: CONED INTEGRATION: Completed. Ellapsed time is {ellapsed()}"
-            )
-        except UnxpectedBehavior:
-            main_logger.error("Unxpectedly completed. See logs for more details")
+        connector = ConEdConnector(env_tz_info=CFG.ENVIRONMENT_TIME_ZONE)
+        connector.configure(event)
+        connector.run()
+        main_logger.info(
+            f"INFO: CONED INTEGRATION: Completed. Ellapsed time is {ellapsed()}"
+        )
 
 
 if __name__ == "__main__":
