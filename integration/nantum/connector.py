@@ -122,7 +122,7 @@ def main(event, context):  # pylint:disable=unused-argument
 
 if __name__ == "__main__":
     CONNECTOR_NAME = "nantum"
-    METERS_AMOUNHT = 2
+    METERS_AMOUNHT = 8
     DEBUG_LOGGER = Logger(
         name="debug",
         level="DEBUG",
