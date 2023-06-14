@@ -1,5 +1,5 @@
 """Property General Info Data structures"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from common.data_representation.config.property.data_structure.general import (
@@ -26,11 +26,11 @@ class PropertyGeneralInfo:
 
     name: str = ""
     primaryFunction: str = ""  # pylint: disable=invalid-name
-    grossFloorArea: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    grossFloorArea: GrossFloorAreaData = field(  # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
     yearBuilt: Decimal = Decimal("0")  # pylint: disable=invalid-name
-    address: PropertyAddress = PropertyAddress()
+    address: PropertyAddress = field(default_factory=PropertyAddress)
     numberOfBuildings: Decimal = Decimal("0")  # pylint: disable=invalid-name
     isFederalProperty: str = ""  # pylint: disable=invalid-name
     occupancyPercentage: Decimal = Decimal("0")  # pylint: disable=invalid-name

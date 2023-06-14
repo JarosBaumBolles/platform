@@ -1,12 +1,10 @@
 """Supermarket Data Structures"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Optional
 
 from common.data_representation.config.property.data_structure.general import (
-    GrossFloorAreaData,
-    UseTiming,
-)
+    GrossFloorAreaData, UseTiming)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -14,8 +12,8 @@ from common.data_representation.config.property.data_structure.general import (
 class SupermarketUseDetails:
     """Supermarket DAta Structure"""
 
-    totalGrossFloorArea: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    totalGrossFloorArea: GrossFloorAreaData = field(    # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
     weeklyOperatingHours: Decimal = Decimal("0")  # pylint: disable=invalid-name
     numberOfWorkers: Decimal = Decimal("0")  # pylint: disable=invalid-name
@@ -31,11 +29,11 @@ class SupermarketUseDetails:
     percentHeated: str = ""  # pylint: disable=invalid-name
     singleStore: str = ""  # pylint: disable=invalid-name
     exteriorEntranceToThePublic: str = ""  # pylint: disable=invalid-name
-    areaOfAllWalkInRefrigerationUnits: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    areaOfAllWalkInRefrigerationUnits: GrossFloorAreaData = field(  # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
-    lengthOfAllOpenClosedRefrigerationUnits: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    lengthOfAllOpenClosedRefrigerationUnits: GrossFloorAreaData = field(  # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
     cookingFacilities: str = ""  # pylint: disable=invalid-name
 

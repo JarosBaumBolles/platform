@@ -1,5 +1,5 @@
 """Meter Proprty Data Structure"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import List, Optional
 
@@ -17,8 +17,8 @@ class MeterPropertyAssociationData:
     externalWeight: Decimal = Decimal("1")  # pylint: disable=invalid-name
     weight: Decimal = Decimal("1")
     propertyRepresentation: str = ""  # pylint: disable=invalid-name
-    tags: TagsData = TagsData()
-    audit: AuditData = AuditData()
+    tags: TagsData = field(default_factory=TagsData)
+    audit: AuditData = field(default_factory=AuditData)
 
 
 # pylint: disable=too-many-instance-attributes

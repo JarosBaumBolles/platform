@@ -1,5 +1,5 @@
 """Data Centr structures"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from common.data_representation.config.property.data_structure.general import (
@@ -12,8 +12,8 @@ from common.data_representation.config.property.data_structure.general import (
 class DatacenterUseDetails:
     """Data Centr use data structure"""
 
-    totalGrossFloorArea: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    totalGrossFloorArea: GrossFloorAreaData = field(  # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
     estimatesApplied: str = ""  # pylint: disable=invalid-name
     coolingEquipmentRedundancy: str = ""  # pylint: disable=invalid-name
@@ -25,7 +25,7 @@ class DatacenterUseDetails:
 class DatacenterPropertyUse:
     """Data Center Property structure"""
 
-    useDetails: DatacenterUseDetails = (  # pylint: disable=invalid-name
-        DatacenterUseDetails()
+    useDetails: DatacenterUseDetails = field(  # pylint: disable=invalid-name
+        default_factory=DatacenterUseDetails
     )
     useTiming: Optional[UseTiming] = None  # pylint: disable=invalid-name

@@ -1,5 +1,5 @@
 """Parking Data Structures"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from common.data_representation.config.property.data_structure.general import (
@@ -11,20 +11,22 @@ from common.data_representation.config.property.data_structure.general import (
 @dataclass
 class ParkingUseDetails:
     """Parking Use Details structure"""
+
     supplementalHeating: str = ""  # pylint: disable=invalid-name
-    openFootage: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    openFootage: GrossFloorAreaData = field( # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
-    completelyEnclosedFootage: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    completelyEnclosedFootage: GrossFloorAreaData = field(  # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
-    partiallyEnclosedFootage: GrossFloorAreaData = (  # pylint: disable=invalid-name
-        GrossFloorAreaData()
+    partiallyEnclosedFootage: GrossFloorAreaData = field(   # pylint: disable=invalid-name
+        default_factory=GrossFloorAreaData
     )
 
 
 @dataclass
 class ParkingPropertyUse:
     """Parking Property Use Data Structure"""
+
     useDetails: ParkingUseDetails  # pylint: disable=invalid-name
     useTiming: Optional[UseTiming] = None  # pylint: disable=invalid-name
