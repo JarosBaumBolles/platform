@@ -2,7 +2,7 @@ expiringdict==1.2.2
 google-auth==2.0.1
 google-cloud-storage==1.42.0
 google-api-python-client==2.18.0
-google-cloud-bigquery==2.31.0
+google-cloud-bigquery==3.11.1
 google-cloud-bigquery-storage==2.6.3
 google-cloud-logging==3.0.0
 google-cloud-pubsub==2.9.0

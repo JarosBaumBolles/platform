@@ -88,7 +88,7 @@ class ContactData:
     firstName: str = ""  # pylint: disable=invalid-name
     lastName: str = ""  # pylint: disable=invalid-name
     email: str = ""
-    address: PropertyAddress = PropertyAddress()
+    address: PropertyAddress = field(default_factory=PropertyAddress)
     jobTitle: str = ""  # pylint: disable=invalid-name
     phone: str = ""
 
@@ -110,9 +110,11 @@ class Meter:  # pylint: disable=too-many-instance-attributes
     meter_id: int = 0
     unitOfMeasure: str = ""  # pylint: disable=invalid-name
     updateFrequency: str = ""  # pylint: disable=invalid-name
-    meteredDataLocation: DataLocation = DataLocation()  # pylint: disable=invalid-name
+    meteredDataLocation: DataLocation = field(  # pylint: disable=invalid-name
+        default_factory=DataLocation
+    )  # pylint: disable=invalid-name
     tags: dict = field(default_factory=dict)
-    audit: Audit = Audit()
+    audit: Audit = field(default_factory=Audit)
 
 
 @dataclass
@@ -131,8 +133,12 @@ class Connector:
     function: str = ""
     timezone: str = ""
     parameters: dict = field(default_factory=dict)
-    fetchStrategy: FetchStarategy = FetchStarategy()  # pylint: disable=invalid-name
-    rawDataLocation: DataLocation = DataLocation()  # pylint: disable=invalid-name
+    fetchStrategy: FetchStarategy = field(  # pylint: disable=invalid-name
+        default_factory=FetchStarategy
+    )
+    rawDataLocation: DataLocation = field(  # pylint: disable=invalid-name
+        default_factory=DataLocation
+    )
 
 
 @dataclass
@@ -608,7 +614,6 @@ class DwUpdateConnector(BasePullConnector):
     def __check_meters_state(
         self, previous_state: Dict[str, Any], participant_cfg: Dict[str, Any]
     ) -> None:
-
         data_getter = itemgetter(*self.__participant_meters_keys__)
 
         for connector in participant_cfg["participant"]["connectors"]:
@@ -632,7 +637,6 @@ class DwUpdateConnector(BasePullConnector):
                     participant_cfg["extra"]["scope"] = ScopeUpdate.full.value
 
     def _get_prticipant_update_scope(self, participant_cfg: Dict[str, Any]) -> None:
-
         # TODO: Should be refactored later to be more clear
 
         self._logger.info(
@@ -754,7 +758,6 @@ class DwUpdateConnector(BasePullConnector):
 
     def _delete_participant_rows(self, connection: Client) -> None:
         with elapsed_timer() as elapsed:
-
             self._logger.debug("Starting properties rows deletion.")
 
             query = self.__participant_delete_rows_sql__.format(
@@ -778,7 +781,6 @@ class DwUpdateConnector(BasePullConnector):
 
     def _insert_participant_data(self, connection: Client) -> None:
         with elapsed_timer() as elapsed:
-
             self._logger.debug("Starting participant processing.")
 
             if self._participant_info.contact is not None:
@@ -831,7 +833,6 @@ class DwUpdateConnector(BasePullConnector):
 
     def _get_latest_calendar(self, connection: Client) -> dict[int, CalendarRow]:
         with elapsed_timer() as elapsed:
-
             self._logger.debug("Start fetching calendar data.")
 
             rows = list(
@@ -1416,7 +1417,6 @@ class DwUpdateConnector(BasePullConnector):
                 )
 
     def _delete_orphan_meters_association_meters_ids(self, connection: Client) -> None:
-
         self.__delete_orphan_meters_association(
             check_query=self.__meters_association_orphan_meter_ids__,
             delete_query=self.__meters_association_delete_orphan_meter_ids__,
@@ -1427,7 +1427,6 @@ class DwUpdateConnector(BasePullConnector):
     def _delete_orphan_meters_association_property_ids(
         self, connection: Client
     ) -> None:
-
         self.__delete_orphan_meters_association(
             check_query=self.__meters_association_orphan_properties_ids__,
             delete_query=self.__meters_association_delete_orphan_properties_ids__,
@@ -1435,7 +1434,7 @@ class DwUpdateConnector(BasePullConnector):
             connection=connection,
         )
 
-    def run(self) -> None:
+    def run(self, **kwargs) -> None:
         self._run_time = parse(tz_info=self.env_tz_info)
         with elapsed_timer() as ellapsed:
             self._logger.info("Start db load processing.")
